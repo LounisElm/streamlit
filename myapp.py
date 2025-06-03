@@ -1,21 +1,16 @@
-import yfinance as yf
 import streamlit as st
 
-st.write("""
-# Simple Stock Price App
+st.title("Système de recommandation de films")
+st.write("Bienvenue sur l’interface de recommandation de films.")
 
-Shown are the stock closing price and volume of Google!
+# Simule un utilisateur
+user_id = st.number_input("Entrez votre identifiant utilisateur", min_value=1, value=1)
 
-""")
-
-# https://towardsdatascience.com/how-to-get-stock-data-using-python-c0de1df17e75
-#define the ticker symbol
-tickerSymbol = 'GOOGL'
-#get data on this ticker
-tickerData = yf.Ticker(tickerSymbol)
-#get the historical prices for this ticker
-tickerDf = tickerData.history(period='1d', start='2010-5-31', end='2020-5-31')
-# Open	High	Low	Close	Volume	Dividends	Stock Splits
-
-st.line_chart(tickerDf.Close)
-st.line_chart(tickerDf.Volume)
+# Bouton pour lancer la recommandation
+if st.button("Obtenir des recommandations"):
+    # Ici tu mettras l'appel à ton vrai modèle plus tard
+    st.write(f"Voici les recommandations pour l'utilisateur {user_id} :")
+    # Recommandations factices pour l’instant
+    fake_movies = ["Inception", "Le Seigneur des Anneaux", "Matrix"]
+    for movie in fake_movies:
+        st.write(f"- {movie}")
