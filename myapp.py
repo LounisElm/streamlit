@@ -149,6 +149,7 @@ if movie_query:
                         poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
                         if poster_url:
                             st.image(poster_url)
+
                         if st.button(
                             "Description",
                             key=f"search_{row[id_col]}",
@@ -179,6 +180,7 @@ with trending_container:
                     st.text(movie_title)
                     if poster_url:
                         st.image(poster_url, use_container_width=True)
+
                     if st.button(
                         "Description",
                         key=f"trend_{row['item']}",
