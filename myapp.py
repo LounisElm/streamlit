@@ -13,17 +13,6 @@ st.markdown(
         background-color: #141414;
         color: white;
     }
-    .search-container {
-        position: fixed;
-        top: 10px;
-        right: 10px;
-        width: 200px;
-        z-index: 100;
-    }
-    .search-container input {
-        font-size: 12px;
-        padding: 2px 4px;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -71,24 +60,7 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
     return {}
 
 
-def fetch_trailer_url(tmdb_id: int | str | None) -> str:
-    """Return the YouTube trailer URL using the TMDb API if available."""
-    if not tmdb_id:
-        return ""
-    api_key = os.getenv("TMDB_API_KEY")
-    if not api_key:
-        return ""
-    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}/videos"
-    params = {"api_key": api_key}
-    try:
-        response = requests.get(url, params=params, timeout=5)
-        data = response.json()
-        for video in data.get("results", []):
-            if video.get("site") == "YouTube" and video.get("type") == "Trailer":
-                return f"https://www.youtube.com/watch?v={video.get('key')}"
-    except Exception:
-        pass
-    return ""
+
 
 @st.cache_data
 def load_recommendations(path: str) -> pd.DataFrame:
@@ -162,10 +134,17 @@ except FileNotFoundError:
     global_ratings = pd.Series(dtype=float)
 
 
-# Barre de recherche de films
-st.markdown("<div class='search-container'>", unsafe_allow_html=True)
-movie_query = st.text_input("", placeholder="Rechercher un film")
-st.markdown("</div>", unsafe_allow_html=True)
+# Barre latérale pour la recherche et la sélection d'utilisateur
+with st.sidebar:
+    st.header("Navigation")
+    selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
+    recs = load_recommendations(REC_PATHS[selected_rec])
+
+    user_ids = recs["user"].unique()
+    user_id = st.selectbox("Utilisateur", sorted(user_ids))
+
+    movie_query = st.text_input("Rechercher un film")
+
 if movie_query:
     if movies.empty:
         st.info("Aucun film n'est disponible.")
@@ -196,13 +175,6 @@ if movie_query:
     st.markdown("---")
 
 trending_container = st.container()
-with st.container():
-    selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
-    recs = load_recommendations(REC_PATHS[selected_rec])
-
-    user_ids = recs["user"].unique()
-    user_id = st.selectbox("Utilisateur", sorted(user_ids))
-
 with trending_container:
     if not movies.empty:
         st.subheader(f"\u00c0 la une pour l'utilisateur {user_id}")
@@ -227,7 +199,6 @@ with trending_container:
 if "selected_movie" in st.session_state:
     movie_id = st.session_state["selected_movie"]
     details = fetch_movie_details(id_to_imdb.get(movie_id))
-    trailer_url = fetch_trailer_url(id_to_tmdb.get(movie_id))
     title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
     # Display the details in a narrower column so the poster doesn't fill
     # the whole screen
@@ -236,9 +207,7 @@ if "selected_movie" in st.session_state:
 
         col_media, col_text = st.columns([1, 2])
         with col_media:
-            if trailer_url:
-                st.video(trailer_url)
-            elif details.get("poster"):
+            if details.get("poster"):
                 st.image(details["poster"], width=300)
         with col_text:
             if details.get("plot"):
