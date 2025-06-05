@@ -45,18 +45,22 @@ MOVIES_PATH = "movies.csv"
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
 
-selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
-recs = load_recommendations(REC_PATHS[selected_rec])
-
-# Bloc pour charger le mapping ID -> Titre
+# Chargement des méta‑données des films et barre de recherche
 try:
     movies = load_movies(MOVIES_PATH)
     id_col = "movieId" if "movieId" in movies.columns else movies.columns[0]
     title_col = "title" if "title" in movies.columns else movies.columns[1]
+    search_term = st.text_input("Rechercher un film")
+    if search_term:
+        results = movies[movies[title_col].str.contains(search_term, case=False, na=False)]
+        st.dataframe(results[[id_col, title_col]].head(10))
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
 except FileNotFoundError:
     st.warning(f"Fichier {MOVIES_PATH} introuvable : les titres ne seront pas affichés.")
     id_to_title = {}
+
+selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
+recs = load_recommendations(REC_PATHS[selected_rec])
 
 user_ids = recs["user"].unique()
 user_id = st.selectbox("Utilisateur", sorted(user_ids))
