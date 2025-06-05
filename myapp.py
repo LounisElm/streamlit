@@ -40,7 +40,7 @@ REC_PATHS = {
 }
 
 METRICS_PATH = "RECOMMENDER-SYSTEM/mlsmm2156/evaluation/results_all.csv"
-MOVIES_PATH = "movie.csv"
+MOVIES_PATH = "movies.csv"
 
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
@@ -55,7 +55,7 @@ try:
     title_col = "title" if "title" in movies.columns else movies.columns[1]
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
 except FileNotFoundError:
-    st.warning("Fichier movie.csv introuvable : les titres ne seront pas affichés.")
+    st.warning(f"Fichier {MOVIES_PATH} introuvable : les titres ne seront pas affichés.")
     id_to_title = {}
 
 user_ids = recs["user"].unique()
