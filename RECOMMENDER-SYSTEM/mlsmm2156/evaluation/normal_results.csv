@@ -1,0 +1,4 @@
+dataset,features_method,regressor_method,RMSE,MAE,TrainTime
+normal,all_features,random_forest,0.3306291136311954,0.25090931016408435,0.0
+normal,all_features,xgboost,0.3511037578344828,0.20942053376719705,0.0
+normal,all_features,neural_network,0.642360812279005,0.4647572018444679,0.0

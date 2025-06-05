@@ -1,0 +1,5 @@
+dataset,features_method,regressor_method,RMSE,MAE,TrainTime
+hackathon,genome_tags,linear_regression,0.7189052720302087,0.5460426879911746,27.426053047180176
+hackathon,all_features_with_genome,random_forest,0.2889514981779654,0.21683116239705683,200.1582326889038
+hackathon,all_features_with_genome,xgboost,0.18385128334789644,0.11227979838162364,240.76418662071228
+hackathon,all_features_with_genome,neural_network,0.5024224749224568,0.37045784355021694,483.3226959705353

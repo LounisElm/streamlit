@@ -14,3 +14,4 @@ if st.button("Obtenir des recommandations"):
     fake_movies = ["Inception", "Le Seigneur des Anneaux", "Matrix"]
     for movie in fake_movies:
         st.write(f"- {movie}")
+genre = st.selectbox("Choisissez un genre", ["Tous", "Action", "Comédie", "Drame"])
