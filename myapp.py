@@ -45,10 +45,7 @@ MOVIES_PATH = "movies.csv"
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
 
-selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
-recs = load_recommendations(REC_PATHS[selected_rec])
-
-# Bloc pour charger le mapping ID -> Titre
+# Chargement des métadonnées des films pour la recherche et l'affichage
 try:
     movies = load_movies(MOVIES_PATH)
     id_col = "movieId" if "movieId" in movies.columns else movies.columns[0]
@@ -56,7 +53,33 @@ try:
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
 except FileNotFoundError:
     st.warning(f"Fichier {MOVIES_PATH} introuvable : les titres ne seront pas affichés.")
+    movies = pd.DataFrame()
     id_to_title = {}
+    id_col = title_col = None
+
+# Barre de recherche de films
+movie_query = st.text_input("Rechercher un film")
+if movie_query:
+    if movies.empty:
+        st.info("Aucun film n'est disponible.")
+    else:
+        results = movies[movies[title_col].str.contains(movie_query, case=False, na=False)]
+        if results.empty:
+            st.info("Aucun film trouvé.")
+        else:
+            for start in range(0, min(len(results), 10), 5):
+                subset = results.iloc[start : start + 5]
+                cols = st.columns(len(subset))
+                for col, (_, row) in zip(cols, subset.iterrows()):
+                    with col:
+                        st.text(row[title_col])
+                        poster_url = fetch_poster(row[id_col]) if id_col else ""
+                        if poster_url:
+                            st.image(poster_url)
+    st.markdown("---")
+
+selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
+recs = load_recommendations(REC_PATHS[selected_rec])
 
 user_ids = recs["user"].unique()
 user_id = st.selectbox("Utilisateur", sorted(user_ids))
