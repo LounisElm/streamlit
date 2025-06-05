@@ -40,7 +40,7 @@ REC_PATHS = {
 }
 
 METRICS_PATH = "RECOMMENDER-SYSTEM/mlsmm2156/evaluation/results_all.csv"
-MOVIES_PATH = "data/hackathon/content/movie.csv"
+MOVIES_PATH = "movie.csv"
 
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
