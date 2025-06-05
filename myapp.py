@@ -29,14 +29,17 @@ st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
 
 selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
 recs = load_recommendations(REC_PATHS[selected_rec])
+
+# Bloc pour charger le mapping ID -> Titre
 try:
     movies = load_movies(MOVIES_PATH)
     id_col = "movieId" if "movieId" in movies.columns else movies.columns[0]
     title_col = "title" if "title" in movies.columns else movies.columns[1]
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
 except FileNotFoundError:
-    st.warning("Fichier movie.csv introuvable : les titres ne seront pas affich\xC3\xA9s.")
+    st.warning("Fichier movie.csv introuvable : les titres ne seront pas affichés.")
     id_to_title = {}
+
 user_ids = recs["user"].unique()
 user_id = st.selectbox("Utilisateur", sorted(user_ids))
 num_recs = st.slider("Nombre de recommandations", 1, 20, 10)
