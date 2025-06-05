@@ -149,7 +149,7 @@ if movie_query:
                         poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
                         if poster_url:
                             st.image(poster_url)
-
+                            
                         if st.button(
                             "Description",
                             key=f"search_{row[id_col]}",
@@ -180,6 +180,37 @@ with trending_container:
                     st.text(movie_title)
                     if poster_url:
                         st.image(poster_url, use_container_width=True)
+                    if st.button(
+                        "Description",
+                        key=f"trend_{row['item']}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["selected_movie"] = row["item"]
+
+if "selected_movie" in st.session_state:
+    movie_id = st.session_state["selected_movie"]
+    details = fetch_movie_details(id_to_imdb.get(movie_id))
+    title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
+    with st.expander(title, expanded=True):
+        if details.get("poster"):
+            st.image(details["poster"], use_container_width=True)
+        genres = ""
+        if not movies.empty and "genres" in movies.columns:
+            match = movies[movies[id_col] == movie_id]
+            if not match.empty:
+                genres = match.iloc[0]["genres"].replace("|", ", ")
+        if genres:
+            st.write(f"Genres : {genres}")
+        if details.get("runtime"):
+            st.write(f"Dur\u00e9e : {details['runtime']}")
+        if details.get("actors"):
+            st.write(f"Acteurs : {details['actors']}")
+        if movie_id in global_ratings.index:
+            st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
+        if details.get("imdbRating"):
+            st.write(f"Note IMDb : {details['imdbRating']}")
+        if st.button("Fermer", key="close_details"):
+            st.session_state.pop("selected_movie", None)
 
                     if st.button(
                         "Description",
