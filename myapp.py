@@ -96,19 +96,6 @@ except FileNotFoundError:
     id_to_imdb = {}
     id_col = title_col = None
 
-# Affichage d'un panel de films pour rappeler l'ambiance "Netflix"
-if not movies.empty:
-    st.subheader("\u00c0 la une")
-    trending = movies.sample(min(12, len(movies)), random_state=42)
-    for start in range(0, len(trending), 4):
-        subset = trending.iloc[start : start + 4]
-        cols = st.columns(len(subset))
-        for col, (_, row) in zip(cols, subset.iterrows()):
-            with col:
-                st.text(row[title_col])
-                poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
-                if poster_url:
-                    st.image(poster_url, use_container_width=True)
 
 # Barre de recherche de films
 st.markdown("<div class='search-container'>", unsafe_allow_html=True)
@@ -139,6 +126,21 @@ recs = load_recommendations(REC_PATHS[selected_rec])
 user_ids = recs["user"].unique()
 user_id = st.selectbox("Utilisateur", sorted(user_ids))
 num_recs = st.slider("Nombre de recommandations", 1, 20, 10)
+
+# Display personalized "A la une" section based on the selected user
+if not movies.empty:
+    st.subheader(f"\u00c0 la une pour l'utilisateur {user_id}")
+    trending = recs[recs["user"] == user_id].nlargest(12, "estimated_rating")
+    for start in range(0, len(trending), 4):
+        subset = trending.iloc[start : start + 4]
+        cols = st.columns(len(subset))
+        for col, (_, row) in zip(cols, subset.iterrows()):
+            movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
+            poster_url = fetch_poster(id_to_imdb.get(row["item"]))
+            with col:
+                st.text(movie_title)
+                if poster_url:
+                    st.image(poster_url, use_container_width=True)
 
 if st.button("Afficher les recommandations"):
     user_recs = recs[recs["user"] == user_id].nlargest(int(num_recs), "estimated_rating")
