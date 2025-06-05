@@ -163,8 +163,10 @@ with st.container():
     selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
     recs = load_recommendations(REC_PATHS[selected_rec])
 
-    user_ids = recs["user"].unique()
-    user_id = st.selectbox("Utilisateur", sorted(user_ids))
+    movie_id = st.session_state["selected_movie"]
+    with st.expander(title, expanded=True):
+        if st.button("Fermer", key="close_details"):
+            st.session_state.pop("selected_movie", None)
 
 with trending_container:
     if not movies.empty:
