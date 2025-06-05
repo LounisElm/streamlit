@@ -8,4 +8,4 @@ The app lets you search for movies and view personalized recommendations. Movie 
 
 If you set the environment variable `TMDB_API_KEY` with your TMDb API key, the
 application will retrieve the YouTube trailer for each movie when available and
-show it using `st.video` in the description panel.
+show it alongside the plot description using `st.video` in the details panel.
