@@ -108,8 +108,7 @@ if not movies.empty:
                 st.text(row[title_col])
                 poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
                 if poster_url:
-                    st.image(poster_url, use_column_width=True)
-
+                    st.image(poster_url, use_container_width=True)
 # Barre de recherche de films
 st.markdown("<div class='search-container'>", unsafe_allow_html=True)
 movie_query = st.text_input("", placeholder="Rechercher un film")
