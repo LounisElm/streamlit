@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
+import os
+import uuid
 
 
 def fetch_poster(imdb_id: int | str | None) -> str:
@@ -133,3 +135,69 @@ sont chargées dans cette application. Le tableau ci-dessus résume les
 performances obtenues lors de l'évaluation.
 """
 )
+
+st.markdown("---")
+st.subheader("Création d'un profil")
+
+PROFILE_PATH = "profiles.csv"
+RATINGS_COPY_PATH = "ratings_copy.csv"
+
+# Préparation de la liste des genres à partir des métadonnées des films
+if not movies.empty and "genres" in movies.columns:
+    genre_set = set()
+    for g in movies["genres"].dropna():
+        genre_set.update(g.split("|"))
+    genres_list = sorted(genre_set)
+else:
+    genres_list = []
+
+pseudo = st.text_input("Pseudonyme")
+password = st.text_input("Mot de passe", type="password")
+selected_genres = st.multiselect("Genres préférés", genres_list)
+
+genre_ratings = {}
+for genre in selected_genres:
+    genre_ratings[genre] = st.slider(
+        f"Note pour {genre}", 0.0, 5.0, 2.5, 0.5, key=f"rating_{genre}"
+    )
+
+if st.button("Enregistrer le profil"):
+    if not pseudo or not password:
+        st.error("Veuillez renseigner un pseudo et un mot de passe.")
+    else:
+        # Chargement ou création du fichier de profils
+        if os.path.exists(PROFILE_PATH):
+            profiles = pd.read_csv(PROFILE_PATH)
+            next_id = profiles["userId"].max() + 1 if not profiles.empty else 1
+        else:
+            profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
+            next_id = 1
+
+        profiles = profiles._append(
+            {"userId": next_id, "pseudo": pseudo, "password": password},
+            ignore_index=True,
+        )
+        profiles.to_csv(PROFILE_PATH, index=False)
+
+        # Chargement ou création du fichier ratings étendu
+        if os.path.exists(RATINGS_COPY_PATH):
+            ratings_ext = pd.read_csv(RATINGS_COPY_PATH)
+        else:
+            ratings_ext = pd.read_csv("ratings.csv")
+
+        genre_offset = 1_000_000
+        genre_ids = {g: genre_offset + i for i, g in enumerate(genres_list)}
+        now_ts = int(pd.Timestamp.now().timestamp())
+        for g, r in genre_ratings.items():
+            ratings_ext = ratings_ext._append(
+                {
+                    "userId": next_id,
+                    "movieId": genre_ids[g],
+                    "rating": r,
+                    "timestamp": now_ts,
+                },
+                ignore_index=True,
+            )
+
+        ratings_ext.to_csv(RATINGS_COPY_PATH, index=False)
+        st.success(f"Profil enregistré avec l'identifiant {next_id}.")
