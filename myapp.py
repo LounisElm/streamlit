@@ -52,7 +52,7 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
     if not imdb_id:
         return {}
     imdb_id = f"tt{int(imdb_id):07d}"
-    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey=thewdb"
+    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey=thewdb&plot=short"
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
@@ -63,6 +63,7 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
                 "actors": data.get("Actors"),
                 "imdbRating": data.get("imdbRating"),
                 "title": data.get("Title"),
+                "plot": data.get("Plot") if data.get("Plot") != "N/A" else "",
             }
             return details
     except Exception:
@@ -232,27 +233,33 @@ if "selected_movie" in st.session_state:
     # the whole screen
     col_details, _ = st.columns([1, 2])
     with col_details.expander(title, expanded=True):
-        if details.get("poster"):
-            st.image(details["poster"], width=300)
-        if trailer_url:
-            st.video(trailer_url)
-        genres = ""
-        if not movies.empty and "genres" in movies.columns:
-            match = movies[movies[id_col] == movie_id]
-            if not match.empty:
-                genres = match.iloc[0]["genres"].replace("|", ", ")
-        if genres:
-            st.write(f"Genres : {genres}")
-        if details.get("runtime"):
-            st.write(f"Dur\u00e9e : {details['runtime']}")
-        if details.get("actors"):
-            st.write(f"Acteurs : {details['actors']}")
-        if movie_id in global_ratings.index:
-            st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
-        if details.get("imdbRating"):
-            st.write(f"Note IMDb : {details['imdbRating']}")
-        if st.button("Fermer", key="close_details"):
-            st.session_state.pop("selected_movie", None)
+
+        col_media, col_text = st.columns([1, 2])
+        with col_media:
+            if trailer_url:
+                st.video(trailer_url)
+            elif details.get("poster"):
+                st.image(details["poster"], width=300)
+        with col_text:
+            if details.get("plot"):
+                st.write(details["plot"])
+            genres = ""
+            if not movies.empty and "genres" in movies.columns:
+                match = movies[movies[id_col] == movie_id]
+                if not match.empty:
+                    genres = match.iloc[0]["genres"].replace("|", ", ")
+            if genres:
+                st.write(f"Genres : {genres}")
+            if details.get("runtime"):
+                st.write(f"Dur\u00e9e : {details['runtime']}")
+            if details.get("actors"):
+                st.write(f"Acteurs : {details['actors']}")
+            if movie_id in global_ratings.index:
+                st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
+            if details.get("imdbRating"):
+                st.write(f"Note IMDb : {details['imdbRating']}")
+            if st.button("Fermer", key="close_details"):
+                st.session_state.pop("selected_movie", None)
 
 st.markdown("---")
 
