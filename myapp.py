@@ -7,6 +7,11 @@ def load_recommendations(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 @st.cache_data
+def load_movies(path: str) -> pd.DataFrame:
+    """Load movie metadata for title lookup."""
+    return pd.read_csv(path)
+
+@st.cache_data
 def load_metrics(path: str) -> pd.DataFrame:
     """Load offline evaluation metrics."""
     return pd.read_csv(path)
@@ -17,12 +22,24 @@ REC_PATHS = {
 }
 
 METRICS_PATH = "RECOMMENDER-SYSTEM/mlsmm2156/evaluation/results_all.csv"
+MOVIES_PATH = "data/hackathon/content/movie.csv"
 
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
 
 selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
 recs = load_recommendations(REC_PATHS[selected_rec])
+
+# Bloc pour charger le mapping ID -> Titre
+try:
+    movies = load_movies(MOVIES_PATH)
+    id_col = "movieId" if "movieId" in movies.columns else movies.columns[0]
+    title_col = "title" if "title" in movies.columns else movies.columns[1]
+    id_to_title = dict(zip(movies[id_col], movies[title_col]))
+except FileNotFoundError:
+    st.warning("Fichier movie.csv introuvable : les titres ne seront pas affichés.")
+    id_to_title = {}
+
 user_ids = recs["user"].unique()
 user_id = st.selectbox("Utilisateur", sorted(user_ids))
 num_recs = st.slider("Nombre de recommandations", 1, 20, 10)
@@ -31,7 +48,8 @@ if st.button("Afficher les recommandations"):
     user_recs = recs[recs["user"] == user_id].nlargest(int(num_recs), "estimated_rating")
     st.write(f"Recommandations pour l'utilisateur {user_id} :")
     for _, row in user_recs.iterrows():
-        st.write(f"Film {row['item']} - Score prédit : {row['estimated_rating']:.2f}")
+        movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
+        st.write(f"{movie_title} - Score prédit : {row['estimated_rating']:.2f}")
 
 st.markdown("---")
 
