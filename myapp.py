@@ -4,6 +4,32 @@ import requests
 import os
 import uuid
 
+st.set_page_config(page_title="Cinéma", layout="wide")
+
+# Style inspiré de Netflix
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #141414;
+        color: white;
+    }
+    .search-container {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        width: 200px;
+        z-index: 100;
+    }
+    .search-container input {
+        font-size: 12px;
+        padding: 2px 4px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 def fetch_poster(imdb_id: int | str | None) -> str:
     """Return the poster URL for a given IMDb id using the free OMDb API."""
@@ -70,8 +96,24 @@ except FileNotFoundError:
     id_to_imdb = {}
     id_col = title_col = None
 
+# Affichage d'un panel de films pour rappeler l'ambiance "Netflix"
+if not movies.empty:
+    st.subheader("\u00c0 la une")
+    trending = movies.sample(min(12, len(movies)), random_state=42)
+    for start in range(0, len(trending), 4):
+        subset = trending.iloc[start : start + 4]
+        cols = st.columns(len(subset))
+        for col, (_, row) in zip(cols, subset.iterrows()):
+            with col:
+                st.text(row[title_col])
+                poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
+                if poster_url:
+                    st.image(poster_url, use_container_width=True)
+
 # Barre de recherche de films
-movie_query = st.text_input("Rechercher un film")
+st.markdown("<div class='search-container'>", unsafe_allow_html=True)
+movie_query = st.text_input("", placeholder="Rechercher un film")
+st.markdown("</div>", unsafe_allow_html=True)
 if movie_query:
     if movies.empty:
         st.info("Aucun film n'est disponible.")
