@@ -202,9 +202,12 @@ if "selected_movie" in st.session_state:
     movie_id = st.session_state["selected_movie"]
     details = fetch_movie_details(id_to_imdb.get(movie_id))
     title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
-    with st.expander(title, expanded=True):
+    # Display the details in a narrower column so the poster doesn't fill
+    # the whole screen
+    col_details, _ = st.columns([1, 2])
+    with col_details.expander(title, expanded=True):
         if details.get("poster"):
-            st.image(details["poster"], use_container_width=True)
+            st.image(details["poster"], width=300)
         genres = ""
         if not movies.empty and "genres" in movies.columns:
             match = movies[movies[id_col] == movie_id]
