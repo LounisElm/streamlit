@@ -3,18 +3,18 @@ import pandas as pd
 import requests
 
 
-def fetch_poster(movie_id: int) -> str:
-    """Return the poster URL for a given movie id using TMDb API."""
-    url = (
-        f"https://api.themoviedb.org/3/movie/{movie_id}?"
-        "api_key=c7ec19ffdd3279641fb606d19ceb9bb1&language=en-US"
-    )
+def fetch_poster(imdb_id: int | str | None) -> str:
+    """Return the poster URL for a given IMDb id using the free OMDb API."""
+    if not imdb_id:
+        return ""
+    imdb_id = f"tt{int(imdb_id):07d}"
+    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey=thewdb"
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
-        poster_path = data.get("poster_path")
-        if poster_path:
-            return f"https://image.tmdb.org/t/p/w500/{poster_path}"
+        poster_url = data.get("Poster")
+        if poster_url and poster_url != "N/A":
+            return poster_url
     except Exception:
         pass
     return ""
@@ -34,6 +34,11 @@ def load_metrics(path: str) -> pd.DataFrame:
     """Load offline evaluation metrics."""
     return pd.read_csv(path)
 
+@st.cache_data
+def load_links(path: str) -> pd.DataFrame:
+    """Load mapping between MovieLens ids and IMDb/TMDb ids."""
+    return pd.read_csv(path)
+
 REC_PATHS = {
     "Full dataset": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_full.csv",
     "Leave-one-out": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_loo.csv",
@@ -41,6 +46,7 @@ REC_PATHS = {
 
 METRICS_PATH = "RECOMMENDER-SYSTEM/mlsmm2156/evaluation/results_all.csv"
 MOVIES_PATH = "movies.csv"
+LINKS_PATH = "links.csv"
 
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
@@ -48,13 +54,18 @@ st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
 # Chargement des métadonnées des films pour la recherche et l'affichage
 try:
     movies = load_movies(MOVIES_PATH)
+    links = load_links(LINKS_PATH)
     id_col = "movieId" if "movieId" in movies.columns else movies.columns[0]
     title_col = "title" if "title" in movies.columns else movies.columns[1]
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
+    link_id_col = "movieId" if "movieId" in links.columns else links.columns[0]
+    imdb_col = "imdbId" if "imdbId" in links.columns else links.columns[1]
+    id_to_imdb = dict(zip(links[link_id_col], links[imdb_col])) if not links.empty else {}
 except FileNotFoundError:
     st.warning(f"Fichier {MOVIES_PATH} introuvable : les titres ne seront pas affichés.")
     movies = pd.DataFrame()
     id_to_title = {}
+    id_to_imdb = {}
     id_col = title_col = None
 
 # Barre de recherche de films
@@ -73,7 +84,7 @@ if movie_query:
                 for col, (_, row) in zip(cols, subset.iterrows()):
                     with col:
                         st.text(row[title_col])
-                        poster_url = fetch_poster(row[id_col]) if id_col else ""
+                        poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
                         if poster_url:
                             st.image(poster_url)
     st.markdown("---")
@@ -96,7 +107,7 @@ if st.button("Afficher les recommandations"):
         cols = st.columns(len(subset))
         for col, row in zip(cols, subset):
             movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
-            poster_url = fetch_poster(row["item"])
+            poster_url = fetch_poster(id_to_imdb.get(row["item"]))
             with col:
                 st.text(movie_title)
                 if poster_url:
