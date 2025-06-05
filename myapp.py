@@ -233,6 +233,7 @@ if "selected_movie" in st.session_state:
     # the whole screen
     col_details, _ = st.columns([1, 2])
     with col_details.expander(title, expanded=True):
+
         col_media, col_text = st.columns([1, 2])
         with col_media:
             if trailer_url:
