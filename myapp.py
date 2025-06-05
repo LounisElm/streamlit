@@ -52,7 +52,7 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
     if not imdb_id:
         return {}
     imdb_id = f"tt{int(imdb_id):07d}"
-    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey=thewdb"
+    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey=thewdb&plot=short"
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
@@ -63,11 +63,32 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
                 "actors": data.get("Actors"),
                 "imdbRating": data.get("imdbRating"),
                 "title": data.get("Title"),
+                "plot": data.get("Plot") if data.get("Plot") != "N/A" else "",
             }
             return details
     except Exception:
         pass
     return {}
+
+
+def fetch_trailer_url(tmdb_id: int | str | None) -> str:
+    """Return the YouTube trailer URL using the TMDb API if available."""
+    if not tmdb_id:
+        return ""
+    api_key = os.getenv("TMDB_API_KEY")
+    if not api_key:
+        return ""
+    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}/videos"
+    params = {"api_key": api_key}
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        data = response.json()
+        for video in data.get("results", []):
+            if video.get("site") == "YouTube" and video.get("type") == "Trailer":
+                return f"https://www.youtube.com/watch?v={video.get('key')}"
+    except Exception:
+        pass
+    return ""
 
 @st.cache_data
 def load_recommendations(path: str) -> pd.DataFrame:
@@ -122,8 +143,12 @@ try:
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
     link_id_col = "movieId" if "movieId" in links.columns else links.columns[0]
     imdb_col = "imdbId" if "imdbId" in links.columns else links.columns[1]
+    tmdb_col = "tmdbId" if "tmdbId" in links.columns else links.columns[2]
     id_to_imdb = (
         dict(zip(links[link_id_col], links[imdb_col])) if not links.empty else {}
+    )
+    id_to_tmdb = (
+        dict(zip(links[link_id_col], links[tmdb_col])) if not links.empty else {}
     )
 except FileNotFoundError:
     st.warning(
@@ -132,6 +157,7 @@ except FileNotFoundError:
     movies = pd.DataFrame()
     id_to_title = {}
     id_to_imdb = {}
+    id_to_tmdb = {}
     id_col = title_col = None
     global_ratings = pd.Series(dtype=float)
 
@@ -201,30 +227,38 @@ with trending_container:
 if "selected_movie" in st.session_state:
     movie_id = st.session_state["selected_movie"]
     details = fetch_movie_details(id_to_imdb.get(movie_id))
+    trailer_url = fetch_trailer_url(id_to_tmdb.get(movie_id))
     title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
     # Display the details in a narrower column so the poster doesn't fill
     # the whole screen
     col_details, _ = st.columns([1, 2])
     with col_details.expander(title, expanded=True):
-        if details.get("poster"):
-            st.image(details["poster"], width=300)
-        genres = ""
-        if not movies.empty and "genres" in movies.columns:
-            match = movies[movies[id_col] == movie_id]
-            if not match.empty:
-                genres = match.iloc[0]["genres"].replace("|", ", ")
-        if genres:
-            st.write(f"Genres : {genres}")
-        if details.get("runtime"):
-            st.write(f"Dur\u00e9e : {details['runtime']}")
-        if details.get("actors"):
-            st.write(f"Acteurs : {details['actors']}")
-        if movie_id in global_ratings.index:
-            st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
-        if details.get("imdbRating"):
-            st.write(f"Note IMDb : {details['imdbRating']}")
-        if st.button("Fermer", key="close_details"):
-            st.session_state.pop("selected_movie", None)
+        col_media, col_text = st.columns([1, 2])
+        with col_media:
+            if trailer_url:
+                st.video(trailer_url)
+            elif details.get("poster"):
+                st.image(details["poster"], width=300)
+        with col_text:
+            if details.get("plot"):
+                st.write(details["plot"])
+            genres = ""
+            if not movies.empty and "genres" in movies.columns:
+                match = movies[movies[id_col] == movie_id]
+                if not match.empty:
+                    genres = match.iloc[0]["genres"].replace("|", ", ")
+            if genres:
+                st.write(f"Genres : {genres}")
+            if details.get("runtime"):
+                st.write(f"Dur\u00e9e : {details['runtime']}")
+            if details.get("actors"):
+                st.write(f"Acteurs : {details['actors']}")
+            if movie_id in global_ratings.index:
+                st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
+            if details.get("imdbRating"):
+                st.write(f"Note IMDb : {details['imdbRating']}")
+            if st.button("Fermer", key="close_details"):
+                st.session_state.pop("selected_movie", None)
 
 st.markdown("---")
 
