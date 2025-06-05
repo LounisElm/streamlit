@@ -46,6 +46,29 @@ def fetch_poster(imdb_id: int | str | None) -> str:
         pass
     return ""
 
+
+def fetch_movie_details(imdb_id: int | str | None) -> dict:
+    """Return additional movie details from the OMDb API."""
+    if not imdb_id:
+        return {}
+    imdb_id = f"tt{int(imdb_id):07d}"
+    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey=thewdb"
+    try:
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        if data.get("Response") == "True":
+            details = {
+                "poster": data.get("Poster") if data.get("Poster") != "N/A" else "",
+                "runtime": data.get("Runtime"),
+                "actors": data.get("Actors"),
+                "imdbRating": data.get("imdbRating"),
+                "title": data.get("Title"),
+            }
+            return details
+    except Exception:
+        pass
+    return {}
+
 @st.cache_data
 def load_recommendations(path: str) -> pd.DataFrame:
     """Load pre-computed top-n recommendations."""
@@ -66,6 +89,12 @@ def load_links(path: str) -> pd.DataFrame:
     """Load mapping between MovieLens ids and IMDb/TMDb ids."""
     return pd.read_csv(path)
 
+@st.cache_data
+def load_global_ratings(path: str) -> pd.Series:
+    """Compute the global mean rating for each movie."""
+    ratings = pd.read_csv(path)
+    return ratings.groupby("movieId")["rating"].mean()
+
 REC_PATHS = {
     "Full dataset": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_full.csv",
     "Leave-one-out": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_loo.csv",
@@ -74,6 +103,7 @@ REC_PATHS = {
 METRICS_PATH = "RECOMMENDER-SYSTEM/mlsmm2156/evaluation/results_all.csv"
 MOVIES_PATH = "movies.csv"
 LINKS_PATH = "links.csv"
+RATINGS_PATH = "ratings.csv"
 
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
@@ -82,6 +112,7 @@ st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
 try:
     movies = load_movies(MOVIES_PATH)
     links = load_links(LINKS_PATH)
+    global_ratings = load_global_ratings(RATINGS_PATH)
     id_col = "movieId" if "movieId" in movies.columns else movies.columns[0]
     title_col = "title" if "title" in movies.columns else movies.columns[1]
     id_to_title = dict(zip(movies[id_col], movies[title_col]))
@@ -94,6 +125,7 @@ except FileNotFoundError:
     id_to_title = {}
     id_to_imdb = {}
     id_col = title_col = None
+    global_ratings = pd.Series(dtype=float)
 
 
 # Barre de recherche de films
@@ -117,6 +149,12 @@ if movie_query:
                         poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
                         if poster_url:
                             st.image(poster_url)
+                        if st.button(
+                            "Description",
+                            key=f"search_{row[id_col]}",
+                            use_container_width=True,
+                        ):
+                            st.session_state["selected_movie"] = row[id_col]
     st.markdown("---")
 
 trending_container = st.container()
@@ -141,6 +179,37 @@ with trending_container:
                     st.text(movie_title)
                     if poster_url:
                         st.image(poster_url, use_container_width=True)
+                    if st.button(
+                        "Description",
+                        key=f"trend_{row['item']}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["selected_movie"] = row["item"]
+
+if "selected_movie" in st.session_state:
+    movie_id = st.session_state["selected_movie"]
+    details = fetch_movie_details(id_to_imdb.get(movie_id))
+    title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
+    with st.expander(title, expanded=True):
+        if details.get("poster"):
+            st.image(details["poster"], use_container_width=True)
+        genres = ""
+        if not movies.empty and "genres" in movies.columns:
+            match = movies[movies[id_col] == movie_id]
+            if not match.empty:
+                genres = match.iloc[0]["genres"].replace("|", ", ")
+        if genres:
+            st.write(f"Genres : {genres}")
+        if details.get("runtime"):
+            st.write(f"Dur\u00e9e : {details['runtime']}")
+        if details.get("actors"):
+            st.write(f"Acteurs : {details['actors']}")
+        if movie_id in global_ratings.index:
+            st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
+        if details.get("imdbRating"):
+            st.write(f"Note IMDb : {details['imdbRating']}")
+        if st.button("Fermer", key="close_details"):
+            st.session_state.pop("selected_movie", None)
 
 st.markdown("---")
 
