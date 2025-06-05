@@ -1,5 +1,23 @@
 import streamlit as st
 import pandas as pd
+import requests
+
+
+def fetch_poster(movie_id: int) -> str:
+    """Return the poster URL for a given movie id using TMDb API."""
+    url = (
+        f"https://api.themoviedb.org/3/movie/{movie_id}?"
+        "api_key=c7ec19ffdd3279641fb606d19ceb9bb1&language=en-US"
+    )
+    try:
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        poster_path = data.get("poster_path")
+        if poster_path:
+            return f"https://image.tmdb.org/t/p/w500/{poster_path}"
+    except Exception:
+        pass
+    return ""
 
 @st.cache_data
 def load_recommendations(path: str) -> pd.DataFrame:
@@ -47,9 +65,20 @@ num_recs = st.slider("Nombre de recommandations", 1, 20, 10)
 if st.button("Afficher les recommandations"):
     user_recs = recs[recs["user"] == user_id].nlargest(int(num_recs), "estimated_rating")
     st.write(f"Recommandations pour l'utilisateur {user_id} :")
-    for _, row in user_recs.iterrows():
-        movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
-        st.write(f"{movie_title} - Score prédit : {row['estimated_rating']:.2f}")
+
+    # Display posters in rows of up to 5 movies
+    rec_list = user_recs.to_dict(orient="records")
+    for start in range(0, len(rec_list), 5):
+        subset = rec_list[start : start + 5]
+        cols = st.columns(len(subset))
+        for col, row in zip(cols, subset):
+            movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
+            poster_url = fetch_poster(row["item"])
+            with col:
+                st.text(movie_title)
+                if poster_url:
+                    st.image(poster_url)
+                st.caption(f"Score prédit : {row['estimated_rating']:.2f}")
 
 st.markdown("---")
 
