@@ -149,7 +149,12 @@ if movie_query:
                         poster_url = fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
                         if poster_url:
                             st.image(poster_url)
-                        if st.button("Détails", key=f"search_{row[id_col]}"):
+
+                        if st.button(
+                            "Description",
+                            key=f"search_{row[id_col]}",
+                            use_container_width=True,
+                        ):
                             st.session_state["selected_movie"] = row[id_col]
     st.markdown("---")
 
@@ -175,7 +180,12 @@ with trending_container:
                     st.text(movie_title)
                     if poster_url:
                         st.image(poster_url, use_container_width=True)
-                    if st.button("Détails", key=f"trend_{row['item']}"):
+
+                    if st.button(
+                        "Description",
+                        key=f"trend_{row['item']}",
+                        use_container_width=True,
+                    ):
                         st.session_state["selected_movie"] = row["item"]
 
 if "selected_movie" in st.session_state:
