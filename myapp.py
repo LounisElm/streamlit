@@ -92,6 +92,17 @@ def load_global_ratings(path: str) -> pd.Series:
     ratings = pd.read_csv(path)
     return ratings.groupby("movieId")["rating"].mean()
 
+
+def append_rating(user: int, movie: int, rating: float) -> None:
+    """Append a single rating to both user rating files."""
+    row = pd.DataFrame(
+        [[user, movie, rating, int(pd.Timestamp.now().timestamp())]],
+        columns=["userId", "movieId", "rating", "timestamp"],
+    )
+    for path in [RATINGS_COPY_PATH, RATINGS_ALL_PATH]:
+        header = not os.path.exists(path)
+        row.to_csv(path, mode="a", header=header, index=False)
+
 REC_PATHS = {
     "Full dataset": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_full.csv",
     "Leave-one-out": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_loo.csv",
@@ -101,6 +112,9 @@ METRICS_PATH = "RECOMMENDER-SYSTEM/mlsmm2156/evaluation/results_all.csv"
 MOVIES_PATH = "movies.csv"
 LINKS_PATH = "links.csv"
 RATINGS_PATH = "ratings.csv"
+RATINGS_ALL_PATH = "ratings_all_users.csv"
+RATINGS_COPY_PATH = "ratings_copy.csv"
+PROFILE_PATH = "profiles.csv"
 
 st.title("Système de recommandation de films")
 st.write("Choisissez un ensemble de recommandations puis un utilisateur.")
@@ -133,6 +147,12 @@ except FileNotFoundError:
     id_col = title_col = None
     global_ratings = pd.Series(dtype=float)
 
+# Interface principale en onglets
+tab_rec, tab_users, tab_rated = st.tabs([
+    "Recommandations",
+    "Utilisateurs",
+    "Films notés",
+])
 
 # Barre latérale pour la recherche et la sélection d'utilisateur
 with st.sidebar:
@@ -145,99 +165,111 @@ with st.sidebar:
 
     movie_query = st.text_input("Rechercher un film")
 
-if movie_query:
-    if movies.empty:
-        st.info("Aucun film n'est disponible.")
-    else:
-        results = movies[
-            movies[title_col].str.contains(movie_query, case=False, na=False)
-        ]
-        if results.empty:
-            st.info("Aucun film trouvé.")
+with tab_rec:
+    if movie_query:
+        if movies.empty:
+            st.info("Aucun film n'est disponible.")
         else:
-            for start in range(0, min(len(results), 10), 5):
-                subset = results.iloc[start : start + 5]
+            results = movies[
+                movies[title_col].str.contains(movie_query, case=False, na=False)
+            ]
+            if results.empty:
+                st.info("Aucun film trouv\u00e9.")
+            else:
+                for start in range(0, min(len(results), 10), 5):
+                    subset = results.iloc[start : start + 5]
+                    cols = st.columns(len(subset))
+                    for col, (_, row) in zip(cols, subset.iterrows()):
+                        with col:
+                            st.text(row[title_col])
+                            poster_url = (
+                                fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
+                            )
+                            if poster_url:
+                                st.image(poster_url)
+                            if st.button(
+                                "Description",
+                                key=f"search_{row[id_col]}",
+                                use_container_width=True,
+                            ):
+                                st.session_state["selected_movie"] = row[id_col]
+        st.markdown("---")
+
+    trending_container = st.container()
+    with trending_container:
+        if not movies.empty:
+            st.subheader(f"\u00c0 la une pour l'utilisateur {user_id}")
+            trending = recs[recs["user"] == user_id].nlargest(12, "estimated_rating")
+            for start in range(0, len(trending), 4):
+                subset = trending.iloc[start : start + 4]
                 cols = st.columns(len(subset))
                 for col, (_, row) in zip(cols, subset.iterrows()):
+                    movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
+                    poster_url = fetch_poster(id_to_imdb.get(row["item"]))
                     with col:
-                        st.text(row[title_col])
-                        poster_url = (
-                            fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
-                        )
+                        st.text(movie_title)
                         if poster_url:
-                            st.image(poster_url)
+                            st.image(poster_url, use_container_width=True)
                         if st.button(
                             "Description",
-                            key=f"search_{row[id_col]}",
+                            key=f"trend_{row['item']}",
                             use_container_width=True,
                         ):
-                            st.session_state["selected_movie"] = row[id_col]
-    st.markdown("---")
+                            st.session_state["selected_movie"] = row["item"]
 
-trending_container = st.container()
-with trending_container:
-    if not movies.empty:
-        st.subheader(f"\u00c0 la une pour l'utilisateur {user_id}")
-        trending = recs[recs["user"] == user_id].nlargest(12, "estimated_rating")
-        for start in range(0, len(trending), 4):
-            subset = trending.iloc[start : start + 4]
-            cols = st.columns(len(subset))
-            for col, (_, row) in zip(cols, subset.iterrows()):
-                movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
-                poster_url = fetch_poster(id_to_imdb.get(row["item"]))
-                with col:
-                    st.text(movie_title)
-                    if poster_url:
-                        st.image(poster_url, use_container_width=True)
-                    if st.button(
-                        "Description",
-                        key=f"trend_{row['item']}",
-                        use_container_width=True,
-                    ):
-                        st.session_state["selected_movie"] = row["item"]
+    if "selected_movie" in st.session_state:
+        movie_id = st.session_state["selected_movie"]
+        details = fetch_movie_details(id_to_imdb.get(movie_id))
+        title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
+        # Display the details in a narrower column so the poster doesn't fill
+        # the whole screen
+        col_details, _ = st.columns([1, 2])
+        with col_details.expander(title, expanded=True):
 
-if "selected_movie" in st.session_state:
-    movie_id = st.session_state["selected_movie"]
-    details = fetch_movie_details(id_to_imdb.get(movie_id))
-    title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
-    # Display the details in a narrower column so the poster doesn't fill
-    # the whole screen
-    col_details, _ = st.columns([1, 2])
-    with col_details.expander(title, expanded=True):
+            col_media, col_text = st.columns([1, 2])
+            with col_media:
+                if details.get("poster"):
+                    st.image(details["poster"], width=300)
+            with col_text:
+                if details.get("plot"):
+                    st.write(details["plot"])
+                genres = ""
+                if not movies.empty and "genres" in movies.columns:
+                    match = movies[movies[id_col] == movie_id]
+                    if not match.empty:
+                        genres = match.iloc[0]["genres"].replace("|", ", ")
+                if genres:
+                    st.write(f"Genres : {genres}")
+                if details.get("runtime"):
+                    st.write(f"Dur\u00e9e : {details['runtime']}")
+                if details.get("actors"):
+                    st.write(f"Acteurs : {details['actors']}")
+                if movie_id in global_ratings.index:
+                    st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
+                if details.get("imdbRating"):
+                    st.write(f"Note IMDb : {details['imdbRating']}")
+                user_rating = st.slider(
+                    "Votre note",
+                    0.0,
+                    5.0,
+                    2.5,
+                    0.5,
+                    key=f"user_rating_{movie_id}",
+                )
+                if st.button("Enregistrer la note", key=f"save_rating_{movie_id}"):
+                    append_rating(user_id, movie_id, user_rating)
+                    st.success("Note enregistree")
+                if st.button("Fermer", key="close_details"):
+                    st.session_state.pop("selected_movie", None)
 
-        col_media, col_text = st.columns([1, 2])
-        with col_media:
-            if details.get("poster"):
-                st.image(details["poster"], width=300)
-        with col_text:
-            if details.get("plot"):
-                st.write(details["plot"])
-            genres = ""
-            if not movies.empty and "genres" in movies.columns:
-                match = movies[movies[id_col] == movie_id]
-                if not match.empty:
-                    genres = match.iloc[0]["genres"].replace("|", ", ")
-            if genres:
-                st.write(f"Genres : {genres}")
-            if details.get("runtime"):
-                st.write(f"Dur\u00e9e : {details['runtime']}")
-            if details.get("actors"):
-                st.write(f"Acteurs : {details['actors']}")
-            if movie_id in global_ratings.index:
-                st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
-            if details.get("imdbRating"):
-                st.write(f"Note IMDb : {details['imdbRating']}")
-            if st.button("Fermer", key="close_details"):
-                st.session_state.pop("selected_movie", None)
+        st.markdown("---")
 
-st.markdown("---")
+        st.subheader("Performances des modèles (hors ligne)")
+        metrics_df = load_metrics(METRICS_PATH)
+        st.dataframe(metrics_df)
 
-st.subheader("Performances des modèles (hors ligne)")
-metrics_df = load_metrics(METRICS_PATH)
-st.dataframe(metrics_df)
-
-st.markdown(
-    """
+        st.markdown(
+            """
 ### À propos de ce système
 Ce démonstrateur combine différentes approches de recommandation :
 - **Collaboratif utilisateur** avec une métrique de similarité personnalisée ;
@@ -248,70 +280,92 @@ Les meilleures prédictions issues de ces modèles ont été pré‑calculées e
 sont chargées dans cette application. Le tableau ci-dessus résume les
 performances obtenues lors de l'évaluation.
 """
-)
-
-st.markdown("---")
-st.subheader("Création d'un profil")
-
-PROFILE_PATH = "profiles.csv"
-RATINGS_COPY_PATH = "ratings_copy.csv"
-
-# Préparation de la liste des genres à partir des métadonnées des films
-if not movies.empty and "genres" in movies.columns:
-    genre_set = set()
-    for g in movies["genres"].dropna():
-        genre_set.update(g.split("|"))
-    genres_list = sorted(genre_set)
-else:
-    genres_list = []
-
-pseudo = st.text_input("Pseudonyme")
-password = st.text_input("Mot de passe", type="password")
-selected_genres = st.multiselect("Genres préférés", genres_list)
-
-genre_ratings = {}
-for genre in selected_genres:
-    genre_ratings[genre] = st.slider(
-        f"Note pour {genre}", 0.0, 5.0, 2.5, 0.5, key=f"rating_{genre}"
-    )
-
-if st.button("Enregistrer le profil"):
-    if not pseudo or not password:
-        st.error("Veuillez renseigner un pseudo et un mot de passe.")
-    else:
-        # Chargement ou création du fichier de profils
-        if os.path.exists(PROFILE_PATH):
-            profiles = pd.read_csv(PROFILE_PATH)
-            next_id = profiles["userId"].max() + 1 if not profiles.empty else 1
-        else:
-            profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
-            next_id = 1
-
-        profiles = profiles._append(
-            {"userId": next_id, "pseudo": pseudo, "password": password},
-            ignore_index=True,
         )
-        profiles.to_csv(PROFILE_PATH, index=False)
 
-        # Chargement ou création du fichier ratings étendu
-        if os.path.exists(RATINGS_COPY_PATH):
-            ratings_ext = pd.read_csv(RATINGS_COPY_PATH)
+with tab_users:
+    st.subheader("Liste des utilisateurs")
+    if os.path.exists(PROFILE_PATH):
+        profiles = pd.read_csv(PROFILE_PATH)
+    else:
+        profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
+    if not profiles.empty:
+        st.dataframe(profiles[["userId", "pseudo"]])
+    else:
+        st.write("Aucun utilisateur enregistré.")
+
+    st.markdown("---")
+    st.subheader("Création d'un profil")
+
+    if not movies.empty and "genres" in movies.columns:
+        genre_set = set()
+        for g in movies["genres"].dropna():
+            genre_set.update(g.split("|"))
+        genres_list = sorted(genre_set)
+    else:
+        genres_list = []
+
+    pseudo = st.text_input("Pseudonyme")
+    password = st.text_input("Mot de passe", type="password")
+    selected_genres = st.multiselect("Genres préférés", genres_list)
+
+    genre_ratings = {}
+    for genre in selected_genres:
+        genre_ratings[genre] = st.slider(
+            f"Note pour {genre}", 0.0, 5.0, 2.5, 0.5, key=f"rating_{genre}"
+        )
+
+    if st.button("Enregistrer le profil"):
+        if not pseudo or not password:
+            st.error("Veuillez renseigner un pseudo et un mot de passe.")
         else:
-            ratings_ext = pd.read_csv("ratings.csv")
+            if os.path.exists(PROFILE_PATH):
+                profiles = pd.read_csv(PROFILE_PATH)
+                next_id = profiles["userId"].max() + 1 if not profiles.empty else 1
+            else:
+                profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
+                next_id = 1
 
-        genre_offset = 1_000_000
-        genre_ids = {g: genre_offset + i for i, g in enumerate(genres_list)}
-        now_ts = int(pd.Timestamp.now().timestamp())
-        for g, r in genre_ratings.items():
-            ratings_ext = ratings_ext._append(
-                {
+            profiles = profiles._append(
+                {"userId": next_id, "pseudo": pseudo, "password": password},
+                ignore_index=True,
+            )
+            profiles.to_csv(PROFILE_PATH, index=False)
+
+            if os.path.exists(RATINGS_COPY_PATH):
+                ratings_ext = pd.read_csv(RATINGS_COPY_PATH)
+            else:
+                ratings_ext = pd.read_csv("ratings.csv")
+
+            genre_offset = 1_000_000
+            genre_ids = {g: genre_offset + i for i, g in enumerate(genres_list)}
+            now_ts = int(pd.Timestamp.now().timestamp())
+            new_rows = []
+            for g, r in genre_ratings.items():
+                row = {
                     "userId": next_id,
                     "movieId": genre_ids[g],
                     "rating": r,
                     "timestamp": now_ts,
-                },
-                ignore_index=True,
-            )
+                }
+                ratings_ext = ratings_ext._append(row, ignore_index=True)
+                new_rows.append(row)
 
-        ratings_ext.to_csv(RATINGS_COPY_PATH, index=False)
-        st.success(f"Profil enregistré avec l'identifiant {next_id}.")
+            ratings_ext.to_csv(RATINGS_COPY_PATH, index=False)
+            if new_rows:
+                pd.DataFrame(new_rows).to_csv(
+                    RATINGS_ALL_PATH, mode="a", header=not os.path.exists(RATINGS_ALL_PATH), index=False
+                )
+            st.success(f"Profil enregistré avec l'identifiant {next_id}.")
+
+with tab_rated:
+    st.subheader("Films d\u00e9j\u00e0 not\u00e9s")
+    if os.path.exists(RATINGS_ALL_PATH):
+        ratings_all = pd.read_csv(RATINGS_ALL_PATH)
+    else:
+        ratings_all = pd.DataFrame(columns=["userId", "movieId", "rating", "timestamp"])
+
+    merged = ratings_all.merge(
+        movies[[id_col, title_col]], left_on="movieId", right_on=id_col, how="left"
+    )
+    merged = merged[["userId", "movieId", title_col, "rating"]]
+    st.dataframe(merged.head(100))
