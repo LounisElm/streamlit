@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
-import uuid
 
 st.set_page_config(page_title="Cinéma", layout="wide")
 
@@ -127,8 +126,6 @@ with st.container():
 
     user_ids = recs["user"].unique()
     user_id = st.selectbox("Utilisateur", sorted(user_ids))
-    num_recs = st.slider("Nombre de recommandations", 1, 20, 10)
-    show_recs = st.button("Afficher les recommandations")
 
 with trending_container:
     if not movies.empty:
@@ -144,23 +141,6 @@ with trending_container:
                     st.text(movie_title)
                     if poster_url:
                         st.image(poster_url, use_container_width=True)
-
-if show_recs:
-    user_recs = recs[recs["user"] == user_id].nlargest(int(num_recs), "estimated_rating")
-
-    # Display posters in rows of up to 5 movies
-    rec_list = user_recs.to_dict(orient="records")
-    for start in range(0, len(rec_list), 5):
-        subset = rec_list[start : start + 5]
-        cols = st.columns(len(subset))
-        for col, row in zip(cols, subset):
-            movie_title = id_to_title.get(row["item"], f"Film {row['item']}")
-            poster_url = fetch_poster(id_to_imdb.get(row["item"]))
-            with col:
-                st.text(movie_title)
-                if poster_url:
-                    st.image(poster_url)
-                st.caption(f"Score prédit : {row['estimated_rating']:.2f}")
 
 st.markdown("---")
 
