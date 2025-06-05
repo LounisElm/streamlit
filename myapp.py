@@ -147,7 +147,6 @@ with trending_container:
 
 if show_recs:
     user_recs = recs[recs["user"] == user_id].nlargest(int(num_recs), "estimated_rating")
-    st.write(f"Recommandations pour l'utilisateur {user_id} :")
 
     # Display posters in rows of up to 5 movies
     rec_list = user_recs.to_dict(orient="records")
