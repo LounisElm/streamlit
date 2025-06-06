@@ -47,6 +47,7 @@ def fetch_poster(imdb_id: int | str | None) -> str:
     return ""
 
 
+@st.cache_data
 def fetch_movie_details(imdb_id: int | str | None) -> dict:
     """Return additional movie details from the OMDb API."""
     if not imdb_id:
@@ -118,26 +119,18 @@ def append_rating(user: int, movie: int, rating: float) -> None:
             df = df.sort_values(["userId"])
         df.to_csv(path, index=False)
 
-
-def get_random_top_movies(n: int = 5, attempts: int = 50, threshold: float = 7.5) -> list[dict]:
-    """Return a list of random movies with IMDb rating >= threshold."""
-    if movies.empty:
+def get_random_top_movies(n: int = 10) -> list[dict]:
+    """Return ``n`` movies chosen randomly from a curated pool."""
+    if not FEATURED_POOL_IDS:
         return []
-    sample_movies = movies.sample(min(len(movies), attempts))
+    chosen = random.sample(FEATURED_POOL_IDS, k=min(n, len(FEATURED_POOL_IDS)))
     results = []
-    for _, row in sample_movies.iterrows():
-        imdb_id = id_to_imdb.get(row[id_col])
-        details = fetch_movie_details(imdb_id)
-        try:
-            rating = float(details.get("imdbRating", 0))
-        except (TypeError, ValueError):
-            rating = 0
-        if rating >= threshold:
-            details["movieId"] = row[id_col]
-            details["title"] = details.get("title") or row[title_col]
-            results.append(details)
-            if len(results) == n:
-                break
+    for movie_id in chosen:
+        details = fetch_movie_details(id_to_imdb.get(movie_id))
+        details["movieId"] = movie_id
+        details["title"] = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
+        results.append(details)
+
     return results
 
 
@@ -230,6 +223,22 @@ try:
     id_to_tmdb = (
         dict(zip(links[link_id_col], links[tmdb_col])) if not links.empty else {}
     )
+    year_series = movies[title_col].str.extract(r"\((\d{4})\)", expand=False)
+    movies["year"] = pd.to_numeric(year_series, errors="coerce")
+    pool_df = movies.dropna(subset=["year"])  # keep only movies with a year
+    pool_df = pool_df[pool_df["year"] >= 2005]
+    rated_pool = pool_df.merge(
+        global_ratings.rename("mean_rating"),
+        left_on=id_col,
+        right_index=True,
+        how="left",
+    )
+    rated_pool = rated_pool.dropna(subset=["mean_rating"])
+    FEATURED_POOL_IDS = (
+        rated_pool.sort_values("mean_rating", ascending=False)
+        .head(100)[id_col]
+        .tolist()
+    )
 except FileNotFoundError:
     st.warning(
         f"Fichier {MOVIES_PATH} introuvable : les titres ne seront pas affichés."
@@ -240,6 +249,7 @@ except FileNotFoundError:
     id_to_tmdb = {}
     id_col = title_col = None
     global_ratings = pd.Series(dtype=float)
+    FEATURED_POOL_IDS = []
 
 # Interface principale en onglets
 tab_featured, tab_rec, tab_users, tab_rated = st.tabs(
