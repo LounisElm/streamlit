@@ -144,6 +144,11 @@ def append_rating(user: int, movie: int, rating: float) -> None:
             df = df.sort_values(["userId"])
         df.to_csv(path, index=False)
 
+    # Clear the cached ratings so new entries appear immediately
+    try:
+        load_all_ratings.clear()
+    except Exception:
+        pass
 
 def get_random_top_movies(n: int = 10) -> list[dict]:
     """Return ``n`` movies chosen randomly from a curated pool."""
