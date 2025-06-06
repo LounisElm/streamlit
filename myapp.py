@@ -14,6 +14,15 @@ st.markdown(
         background-color: #141414;
         color: white;
     }
+    .description {
+        text-align: justify;
+        line-height: 1.4;
+    }
+    .rating-container {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -240,22 +249,21 @@ with tab_rec:
         elif user_id is None:
             st.info("Sélectionnez un utilisateur pour voir les recommandations.")
 
+
     if "selected_movie" in st.session_state:
         movie_id = st.session_state["selected_movie"]
         details = fetch_movie_details(id_to_imdb.get(movie_id))
         title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
-        # Display the details in a narrower column so the poster doesn't fill
-        # the whole screen
-        col_details, _ = st.columns([1, 2])
-        with col_details.expander(title, expanded=True):
 
-            col_media, col_text = st.columns([1, 2])
-            with col_media:
-                if details.get("poster"):
-                    st.image(details["poster"], width=300)
-            with col_text:
+        with st.expander(title, expanded=True):
+            col_main, col_side = st.columns([3, 1])
+
+            with col_main:
                 if details.get("plot"):
-                    st.write(details["plot"])
+                    st.markdown(
+                        f"<div class='description'>{details['plot']}</div>",
+                        unsafe_allow_html=True,
+                    )
                 genres = ""
                 if not movies.empty and "genres" in movies.columns:
                     match = movies[movies[id_col] == movie_id]
@@ -264,15 +272,20 @@ with tab_rec:
                 if genres:
                     st.write(f"Genres : {genres}")
                 if details.get("runtime"):
-                    st.write(f"Dur\u00e9e : {details['runtime']}")
+                    st.write(f"Durée : {details['runtime']}")
                 if details.get("actors"):
                     st.write(f"Acteurs : {details['actors']}")
                 if movie_id in global_ratings.index:
                     st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
                 if details.get("imdbRating"):
                     st.write(f"Note IMDb : {details['imdbRating']}")
+
+            with col_side:
+                if details.get("poster"):
+                    st.image(details["poster"], use_container_width=True)
                 if user_id is not None:
-                    user_rating = st.slider(
+                    slider_col, button_col = st.columns([2, 1])
+                    user_rating = slider_col.slider(
                         "Votre note",
                         0.0,
                         5.0,
@@ -280,14 +293,17 @@ with tab_rec:
                         0.5,
                         key=f"user_rating_{movie_id}",
                     )
-                    if st.button("Enregistrer la note", key=f"save_rating_{movie_id}"):
+                    if button_col.button(
+                        "Enregistrer",
+                        key=f"save_rating_{movie_id}",
+                    ):
                         append_rating(user_id, movie_id, user_rating)
-                        st.success("Note enregistree")
+                        st.success("Note enregistrée")
                 else:
                     st.info("Sélectionnez un utilisateur pour noter ce film.")
-                if st.button("Fermer", key="close_details"):
-                    st.session_state.pop("selected_movie", None)
 
+            if st.button("Fermer", key="close_details"):
+                st.session_state.pop("selected_movie", None)
         st.markdown("---")
 
         st.subheader("Performances des modèles (hors ligne)")
