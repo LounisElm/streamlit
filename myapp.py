@@ -502,6 +502,9 @@ with tab_rec:
                 right_on=id_col,
                 how="left",
             )
+            trending["estimated_rating"] = pd.to_numeric(
+                trending["estimated_rating"], errors="coerce"
+            )
             trending = trending[trending["estimated_rating"] >= min_rating]
             trending = trending[trending["year"].between(*year_range)]
             if genre_filter:
