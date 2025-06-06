@@ -122,6 +122,12 @@ def load_global_ratings(path: str) -> pd.Series:
     return ratings.groupby("movieId")["rating"].mean()
 
 
+@st.cache_data
+def load_all_ratings(path: str) -> pd.DataFrame:
+    """Load full ratings including new profiles."""
+    return pd.read_csv(path)
+
+
 def append_rating(user: int, movie: int, rating: float) -> None:
     """Append a single rating to both user rating files."""
     row = pd.DataFrame(
@@ -480,6 +486,16 @@ with tab_rec:
             )
 
             trending = recs[recs["user"] == user_id]
+            if trending.empty:
+                if os.path.exists(RATINGS_ALL_PATH):
+                    ratings_all = load_all_ratings(RATINGS_ALL_PATH)
+                    trending = recommend_user_based(ratings_all, user_id, top_n=30)
+                    trending = trending.rename(
+                        columns={"movieId": "item", "score": "estimated_rating"}
+                    )
+                else:
+                    trending = pd.DataFrame(columns=["item", "estimated_rating"])
+
             trending = trending.merge(
                 movies[[id_col, "genres", "year"]],
                 left_on="item",
@@ -599,18 +615,21 @@ with tab_profile:
     rated_count = sum(r > 0 for r in st.session_state["profile_ratings"].values())
     st.write(f"{rated_count} film(s) notés (minimum 10)")
 
-    for movie in st.session_state["profile_pool"]:
-        movie_id = movie["movieId"]
-        default = st.session_state["profile_ratings"].get(movie_id, 0.0)
-        cols = st.columns([1, 3])
-        with cols[0]:
-            if movie.get("poster"):
-                st.image(movie["poster"], use_container_width=True)
-        with cols[1]:
-            rating = st.slider(
-                movie["title"], 0.0, 5.0, default, 0.5, key=f"rate_{movie_id}"
-            )
-        st.session_state["profile_ratings"][movie_id] = rating
+    pool = st.session_state["profile_pool"]
+    for start in range(0, len(pool), 5):
+        subset = pool[start : start + 5]
+        cols = st.columns(len(subset))
+        for col, movie in zip(cols, subset):
+            movie_id = movie["movieId"]
+            default = st.session_state["profile_ratings"].get(movie_id, 0.0)
+            with col:
+                if movie.get("poster"):
+                    st.image(movie["poster"], use_container_width=True)
+                st.caption(movie["title"])
+                rating = st.slider(
+                    "Note", 0.0, 5.0, default, 0.5, key=f"rate_{movie_id}"
+                )
+            st.session_state["profile_ratings"][movie_id] = rating
 
     if rated_count >= 10:
         if st.button("Enregistrer le profil"):
