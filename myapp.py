@@ -4,6 +4,8 @@ import requests
 import os
 import hashlib
 import random
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(page_title="Cinéma", layout="wide")
 
@@ -149,6 +151,44 @@ def get_random_top_movies(n: int = 10) -> list[dict]:
         results.append(details)
 
     return results
+
+
+def sample_profile_movies(n: int = 20, exclude: set[int] | None = None) -> list[dict]:
+    """Return ``n`` random well-rated movies for profile creation."""
+    exclude = exclude or set()
+    pool = [mid for mid in FEATURED_POOL_IDS if mid not in exclude]
+    if not pool:
+        return []
+    chosen = random.sample(pool, k=min(n, len(pool)))
+    results = []
+    for movie_id in chosen:
+        results.append({
+            "movieId": movie_id,
+            "title": id_to_title.get(movie_id, f"Film {movie_id}"),
+            "poster": fetch_poster(id_to_imdb.get(movie_id)),
+        })
+    return results
+
+
+def recommend_user_based(ratings: pd.DataFrame, user_id: int, top_n: int = 10, k: int = 5) -> pd.DataFrame:
+    """Return ``top_n`` user-based recommendations for ``user_id``."""
+    user_item = ratings.pivot_table(index="userId", columns="movieId", values="rating")
+    filled = user_item.fillna(0)
+    sims = cosine_similarity(filled)
+    sim_df = pd.DataFrame(sims, index=user_item.index, columns=user_item.index)
+    if user_id not in sim_df.index:
+        return pd.DataFrame(columns=["movieId", "score"])
+    neighbors = sim_df[user_id].drop(user_id).nlargest(k)
+    user_rated = user_item.loc[user_id]
+    unrated = user_rated[user_rated.isna()].index
+    preds = {}
+    for movie in unrated:
+        vec = user_item.loc[neighbors.index, movie]
+        mask = vec.notna()
+        if mask.any():
+            preds[movie] = float(np.dot(vec[mask], neighbors[mask]) / neighbors[mask].sum())
+    top = sorted(preds.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    return pd.DataFrame(top, columns=["movieId", "score"])
 
 
 def show_movie_details(movie_id: int, user_id: int | None, state_key: str) -> None:
@@ -511,89 +551,74 @@ with tab_users:
     st.markdown("---")
     st.subheader("Création d'un profil")
 
-    if not movies.empty and "genres" in movies.columns:
-        genre_set = set()
-        for g in movies["genres"].dropna():
-            genre_set.update(g.split("|"))
-        genres_list = sorted(genre_set)
-    else:
-        genres_list = []
-
     pseudo = st.text_input("Pseudonyme")
     password = st.text_input("Mot de passe", type="password")
-    selected_genres = st.multiselect("Genres préférés", genres_list)
 
-    genre_ratings = {}
-    for genre in selected_genres:
-        genre_ratings[genre] = st.slider(
-            f"Note pour {genre}", 0.0, 5.0, 2.5, 0.5, key=f"rating_{genre}"
-        )
+    if "profile_ratings" not in st.session_state:
+        st.session_state["profile_ratings"] = {}
+    if "profile_pool" not in st.session_state:
+        st.session_state["profile_pool"] = sample_profile_movies(20)
 
-    if st.button("Enregistrer le profil"):
-        if not pseudo or not password:
-            st.error("Veuillez renseigner un pseudo et un mot de passe.")
-        else:
-            # Determine next available user id based on existing ratings and profiles
-            if os.path.exists(RATINGS_ALL_PATH):
-                ratings_all = pd.read_csv(RATINGS_ALL_PATH)
-                max_rating_id = (
-                    ratings_all["userId"].max() if not ratings_all.empty else 0
-                )
-            else:
-                max_rating_id = 0
+    if st.button("Rafraîchir la sélection"):
+        rated_ids = set(st.session_state["profile_ratings"].keys())
+        st.session_state["profile_pool"] = sample_profile_movies(20, exclude=rated_ids)
 
-            if os.path.exists(PROFILE_PATH):
-                profiles = pd.read_csv(PROFILE_PATH)
-                max_profile_id = profiles["userId"].max() if not profiles.empty else 0
-            else:
-                profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
-                max_profile_id = 0
+    st.write(f"{len(st.session_state['profile_ratings'])} film(s) notés (minimum 10)")
 
-            next_id = max(max_rating_id, max_profile_id) + 1
-
-            hashed_pw = hashlib.sha256(password.encode()).hexdigest()
-
-            profiles = profiles._append(
-                {"userId": next_id, "pseudo": pseudo, "password": hashed_pw},
-                ignore_index=True,
+    for movie in st.session_state["profile_pool"]:
+        movie_id = movie["movieId"]
+        default = st.session_state["profile_ratings"].get(movie_id, 2.5)
+        cols = st.columns([1, 3])
+        with cols[0]:
+            if movie.get("poster"):
+                st.image(movie["poster"], use_container_width=True)
+        with cols[1]:
+            rating = st.slider(
+                movie["title"], 0.0, 5.0, default, 0.5, key=f"rate_{movie_id}"
             )
-            profiles.to_csv(PROFILE_PATH, index=False)
+        st.session_state["profile_ratings"][movie_id] = rating
 
-            if os.path.exists(RATINGS_COPY_PATH):
-                ratings_ext = pd.read_csv(RATINGS_COPY_PATH)
+    if len(st.session_state["profile_ratings"]) >= 10:
+        if st.button("Enregistrer le profil"):
+            if not pseudo or not password:
+                st.error("Veuillez renseigner un pseudo et un mot de passe.")
             else:
-                ratings_ext = pd.read_csv("ratings.csv")
-
-            genre_offset = 1_000_000
-            genre_ids = {g: genre_offset + i for i, g in enumerate(genres_list)}
-            now_ts = int(pd.Timestamp.now().timestamp())
-            new_rows = []
-            for g, r in genre_ratings.items():
-                row = {
-                    "userId": next_id,
-                    "movieId": genre_ids[g],
-                    "rating": r,
-                    "timestamp": now_ts,
-                }
-                ratings_ext = ratings_ext._append(row, ignore_index=True)
-                new_rows.append(row)
-
-            ratings_ext = ratings_ext.sort_values(["userId", "timestamp"])
-            ratings_ext.to_csv(RATINGS_COPY_PATH, index=False)
-
-            if new_rows:
                 if os.path.exists(RATINGS_ALL_PATH):
                     ratings_all = pd.read_csv(RATINGS_ALL_PATH)
+                    max_rating_id = ratings_all["userId"].max() if not ratings_all.empty else 0
                 else:
-                    ratings_all = pd.DataFrame(
-                        columns=["userId", "movieId", "rating", "timestamp"]
-                    )
-                ratings_all = pd.concat(
-                    [ratings_all, pd.DataFrame(new_rows)], ignore_index=True
+                    max_rating_id = 0
+
+                if os.path.exists(PROFILE_PATH):
+                    profiles = pd.read_csv(PROFILE_PATH)
+                    max_profile_id = profiles["userId"].max() if not profiles.empty else 0
+                else:
+                    profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
+                    max_profile_id = 0
+
+                next_id = max(max_rating_id, max_profile_id) + 1
+
+                hashed_pw = hashlib.sha256(password.encode()).hexdigest()
+
+                profiles = profiles._append(
+                    {"userId": next_id, "pseudo": pseudo, "password": hashed_pw},
+                    ignore_index=True,
                 )
-                ratings_all = ratings_all.sort_values(["userId", "timestamp"])
-                ratings_all.to_csv(RATINGS_ALL_PATH, index=False)
-            st.success(f"Profil enregistré avec l'identifiant {next_id}.")
+                profiles.to_csv(PROFILE_PATH, index=False)
+
+                for mid, r in st.session_state["profile_ratings"].items():
+                    append_rating(next_id, mid, r)
+
+                st.success(f"Profil enregistré avec l'identifiant {next_id}.")
+
+                ratings_all = pd.read_csv(RATINGS_ALL_PATH)
+                rec_df = recommend_user_based(ratings_all, next_id)
+                if not rec_df.empty:
+                    rec_df["title"] = rec_df["movieId"].map(id_to_title)
+                    st.subheader("Films recommandés :")
+                    st.dataframe(rec_df[["title", "score"]])
+                st.session_state.pop("profile_pool", None)
+                st.session_state.pop("profile_ratings", None)
 
     st.markdown("---")
     st.subheader("Connexion au profil")
