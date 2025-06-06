@@ -2,6 +2,7 @@ streamlit
 pandas
 scikit-learn
 requests
+
 numpy<2
 scikit-surprise
 

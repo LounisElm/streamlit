@@ -6,7 +6,12 @@ import hashlib
 import random
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from surprise import Dataset, Reader, SVD, KNNWithMeans
+
+try:
+    from surprise import Dataset, Reader, SVD, KNNWithMeans
+    SURPRISE_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    SURPRISE_AVAILABLE = False
 
 st.set_page_config(page_title="Cinéma", layout="wide")
 
@@ -214,8 +219,9 @@ def recommend_user_based(
 
 def recommend_svd(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.DataFrame:
     """Return ``top_n`` SVD recommendations for ``user_id``."""
-    if ratings.empty or user_id not in ratings["userId"].unique():
-        return pd.DataFrame(columns=["movieId", "score"])
+
+    if not SURPRISE_AVAILABLE:
+        raise ImportError("scikit-surprise is required for SVD")
 
     reader = Reader(rating_scale=(ratings["rating"].min(), ratings["rating"].max()))
     data = Dataset.load_from_df(ratings[["userId", "movieId", "rating"]], reader)
@@ -234,8 +240,9 @@ def recommend_svd(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.Da
 
 def recommend_knn(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.DataFrame:
     """Return ``top_n`` KNN-based recommendations for ``user_id``."""
-    if ratings.empty or user_id not in ratings["userId"].unique():
-        return pd.DataFrame(columns=["movieId", "score"])
+    if not SURPRISE_AVAILABLE:
+        raise ImportError("scikit-surprise is required for KNN")
+
 
     reader = Reader(rating_scale=(ratings["rating"].min(), ratings["rating"].max()))
     data = Dataset.load_from_df(ratings[["userId", "movieId", "rating"]], reader)
@@ -439,10 +446,11 @@ with st.sidebar:
     else:
         user_id = None if selected_user == "All users" else int(selected_user)
 
-    model_option = st.selectbox(
-        "Algorithme de recommandation",
-        ["Cosinus", "Funk SVD", "KNN"],
-    )
+    algo_choices = ["Cosinus"]
+    if SURPRISE_AVAILABLE:
+        algo_choices.extend(["Funk SVD", "KNN"])
+    model_option = st.selectbox("Algorithme de recommandation", algo_choices
+
 
     movie_query = st.text_input("Rechercher un film")
 
@@ -662,11 +670,12 @@ with tab_profile:
     pseudo = st.text_input("Pseudonyme")
     password = st.text_input("Mot de passe", type="password")
 
+    profile_choices = ["Cosinus"]
+    if SURPRISE_AVAILABLE:
+        profile_choices.extend(["Funk SVD", "KNN"])
     model_option_profile = st.selectbox(
         "Algorithme de recommandation",
-        ["Cosinus", "Funk SVD", "KNN"],
-        key="profile_model",
-    )
+        profile_choices,
 
     if "profile_ratings" not in st.session_state:
         st.session_state["profile_ratings"] = {}
