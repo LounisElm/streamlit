@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
+import hashlib
 
 st.set_page_config(page_title="Cinéma", layout="wide")
 
@@ -60,8 +61,6 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
     return {}
 
 
-
-
 @st.cache_data
 def load_recommendations(path: str) -> pd.DataFrame:
     """Load pre-computed top-n recommendations."""
@@ -109,6 +108,7 @@ def append_rating(user: int, movie: int, rating: float) -> None:
             df = df.sort_values(["userId"])
         df.to_csv(path, index=False)
 
+
 REC_PATHS = {
     "Full dataset": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_full.csv",
     "Leave-one-out": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_loo.csv",
@@ -154,11 +154,13 @@ except FileNotFoundError:
     global_ratings = pd.Series(dtype=float)
 
 # Interface principale en onglets
-tab_rec, tab_users, tab_rated = st.tabs([
-    "Recommandations",
-    "Utilisateurs",
-    "Films notés",
-])
+tab_rec, tab_users, tab_rated = st.tabs(
+    [
+        "Recommandations",
+        "Utilisateurs",
+        "Films notés",
+    ]
+)
 
 # Barre latérale pour la recherche et la sélection d'utilisateur
 with st.sidebar:
@@ -168,8 +170,17 @@ with st.sidebar:
 
     user_ids = sorted(recs["user"].unique())
     user_options = ["All users"] + [str(uid) for uid in user_ids]
+
+    if "active_user_id" in st.session_state:
+        active_label = f"Profil actif ({st.session_state['active_pseudo']})"
+        user_options.insert(0, active_label)
+
     selected_user = st.selectbox("Utilisateur", user_options)
-    user_id = None if selected_user == "All users" else int(selected_user)
+
+    if selected_user.startswith("Profil actif"):
+        user_id = st.session_state["active_user_id"]
+    else:
+        user_id = None if selected_user == "All users" else int(selected_user)
 
     movie_query = st.text_input("Rechercher un film")
 
@@ -191,7 +202,9 @@ with tab_rec:
                         with col:
                             st.text(row[title_col])
                             poster_url = (
-                                fetch_poster(id_to_imdb.get(row[id_col])) if id_col else ""
+                                fetch_poster(id_to_imdb.get(row[id_col]))
+                                if id_col
+                                else ""
                             )
                             if poster_url:
                                 st.image(poster_url)
@@ -302,7 +315,7 @@ with tab_users:
     else:
         profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
     if not profiles.empty:
-        st.dataframe(profiles[["userId", "pseudo"]])
+        st.dataframe(profiles[["userId", "pseudo", "password"]])
     else:
         st.write("Aucun utilisateur enregistré.")
 
@@ -331,15 +344,28 @@ with tab_users:
         if not pseudo or not password:
             st.error("Veuillez renseigner un pseudo et un mot de passe.")
         else:
+            # Determine next available user id based on existing ratings and profiles
+            if os.path.exists(RATINGS_ALL_PATH):
+                ratings_all = pd.read_csv(RATINGS_ALL_PATH)
+                max_rating_id = (
+                    ratings_all["userId"].max() if not ratings_all.empty else 0
+                )
+            else:
+                max_rating_id = 0
+
             if os.path.exists(PROFILE_PATH):
                 profiles = pd.read_csv(PROFILE_PATH)
-                next_id = profiles["userId"].max() + 1 if not profiles.empty else 1
+                max_profile_id = profiles["userId"].max() if not profiles.empty else 0
             else:
                 profiles = pd.DataFrame(columns=["userId", "pseudo", "password"])
-                next_id = 1
+                max_profile_id = 0
+
+            next_id = max(max_rating_id, max_profile_id) + 1
+
+            hashed_pw = hashlib.sha256(password.encode()).hexdigest()
 
             profiles = profiles._append(
-                {"userId": next_id, "pseudo": pseudo, "password": password},
+                {"userId": next_id, "pseudo": pseudo, "password": hashed_pw},
                 ignore_index=True,
             )
             profiles.to_csv(PROFILE_PATH, index=False)
@@ -370,11 +396,38 @@ with tab_users:
                 if os.path.exists(RATINGS_ALL_PATH):
                     ratings_all = pd.read_csv(RATINGS_ALL_PATH)
                 else:
-                    ratings_all = pd.DataFrame(columns=["userId", "movieId", "rating", "timestamp"])
-                ratings_all = pd.concat([ratings_all, pd.DataFrame(new_rows)], ignore_index=True)
+                    ratings_all = pd.DataFrame(
+                        columns=["userId", "movieId", "rating", "timestamp"]
+                    )
+                ratings_all = pd.concat(
+                    [ratings_all, pd.DataFrame(new_rows)], ignore_index=True
+                )
                 ratings_all = ratings_all.sort_values(["userId", "timestamp"])
                 ratings_all.to_csv(RATINGS_ALL_PATH, index=False)
             st.success(f"Profil enregistré avec l'identifiant {next_id}.")
+
+    st.markdown("---")
+    st.subheader("Connexion au profil")
+    login_pseudo = st.text_input("Pseudonyme", key="login_pseudo")
+    login_password = st.text_input(
+        "Mot de passe", type="password", key="login_password"
+    )
+    if st.button("Se connecter"):
+        if os.path.exists(PROFILE_PATH):
+            profiles = pd.read_csv(PROFILE_PATH)
+            row = profiles[profiles["pseudo"] == login_pseudo]
+            if not row.empty:
+                hashed = hashlib.sha256(login_password.encode()).hexdigest()
+                if hashed == row.iloc[0]["password"]:
+                    st.success(f"Connecté en tant que {login_pseudo}")
+                    st.session_state["active_user_id"] = int(row.iloc[0]["userId"])
+                    st.session_state["active_pseudo"] = login_pseudo
+                else:
+                    st.error("Mot de passe incorrect.")
+            else:
+                st.error("Pseudonyme inconnu.")
+        else:
+            st.error("Aucun profil enregistré.")
 
 with tab_rated:
     st.subheader("Films d\u00e9j\u00e0 not\u00e9s")
