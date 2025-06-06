@@ -201,6 +201,13 @@ def show_movie_details(movie_id: int, user_id: int | None, state_key: str) -> No
                     key=f"trailer_{state_key}_{movie_id}",
                 ):
                     st.video(trailer_url)
+            elif os.environ.get("TMDB_API_KEY"):
+                st.info("Bande-annonce non trouvée.")
+            else:
+                st.info(
+                    "Définissez la variable d'environnement TMDB_API_KEY pour "
+                    "afficher les bandes-annonces."
+                )
 
         with col_side:
             if details.get("poster"):
@@ -336,7 +343,11 @@ with st.sidebar:
 
 with tab_featured:
     st.subheader("Films bien notés")
-    featured_movies = get_random_top_movies()
+    if "featured_movies" not in st.session_state:
+        st.session_state["featured_movies"] = get_random_top_movies()
+    if st.button("Rafraîchir", key="refresh_featured"):
+        st.session_state["featured_movies"] = get_random_top_movies()
+    featured_movies = st.session_state["featured_movies"]
     if not featured_movies:
         st.write("Aucun film à afficher.")
     else:

@@ -4,6 +4,8 @@ This repository contains a simple Streamlit application demonstrating a movie re
 
 The app lets you search for movies and view personalized recommendations. Movie posters are displayed with a **Description** button for more info.
 
+The **À la une** section now keeps the same selection while you browse. Use the new **Rafraîchir** button to see another set of movies.
+
 If a `TMDB_API_KEY` environment variable is defined, the app now fetches a
 YouTube trailer for each movie when available. Links to the corresponding IMDb
 and TMDB pages are also displayed in the description panel.
