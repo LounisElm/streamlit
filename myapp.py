@@ -384,3 +384,11 @@ with tab_rated:
     # Show only the ratings for the currently selected user
     user_ratings = merged[merged["userId"] == user_id]
     st.dataframe(user_ratings.head(100))
+    if not user_ratings.empty:
+        csv = user_ratings.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Télécharger le CSV",
+            data=csv,
+            file_name="user_ratings.csv",
+            mime="text/csv",
+        )
