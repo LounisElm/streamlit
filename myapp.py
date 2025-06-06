@@ -368,4 +368,7 @@ with tab_rated:
         movies[[id_col, title_col]], left_on="movieId", right_on=id_col, how="left"
     )
     merged = merged[["userId", "movieId", title_col, "rating"]]
-    st.dataframe(merged.head(100))
+
+    # Show only the ratings for the currently selected user
+    user_ratings = merged[merged["userId"] == user_id]
+    st.dataframe(user_ratings.head(100))
