@@ -6,6 +6,7 @@ import hashlib
 import random
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+
 try:
     from surprise import Dataset, Reader, SVD, KNNWithMeans
     SURPRISE_AVAILABLE = True
@@ -218,10 +219,9 @@ def recommend_user_based(
 
 def recommend_svd(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.DataFrame:
     """Return ``top_n`` SVD recommendations for ``user_id``."""
+
     if not SURPRISE_AVAILABLE:
         raise ImportError("scikit-surprise is required for SVD")
-    if ratings.empty or user_id not in ratings["userId"].unique():
-        return pd.DataFrame(columns=["movieId", "score"])
 
     reader = Reader(rating_scale=(ratings["rating"].min(), ratings["rating"].max()))
     data = Dataset.load_from_df(ratings[["userId", "movieId", "rating"]], reader)
@@ -242,8 +242,7 @@ def recommend_knn(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.Da
     """Return ``top_n`` KNN-based recommendations for ``user_id``."""
     if not SURPRISE_AVAILABLE:
         raise ImportError("scikit-surprise is required for KNN")
-    if ratings.empty or user_id not in ratings["userId"].unique():
-        return pd.DataFrame(columns=["movieId", "score"])
+
 
     reader = Reader(rating_scale=(ratings["rating"].min(), ratings["rating"].max()))
     data = Dataset.load_from_df(ratings[["userId", "movieId", "rating"]], reader)
@@ -450,7 +449,8 @@ with st.sidebar:
     algo_choices = ["Cosinus"]
     if SURPRISE_AVAILABLE:
         algo_choices.extend(["Funk SVD", "KNN"])
-    model_option = st.selectbox("Algorithme de recommandation", algo_choices)
+    model_option = st.selectbox("Algorithme de recommandation", algo_choices
+
 
     movie_query = st.text_input("Rechercher un film")
 
@@ -676,8 +676,6 @@ with tab_profile:
     model_option_profile = st.selectbox(
         "Algorithme de recommandation",
         profile_choices,
-        key="profile_model",
-    )
 
     if "profile_ratings" not in st.session_state:
         st.session_state["profile_ratings"] = {}
