@@ -21,11 +21,12 @@ dataset. Passwords are stored using a SHA-256 hash and displayed hashed in the
 "Liste des utilisateurs" table. A basic login form allows you to test profile
 authentication within the app.
 
-When creating a profile you are asked to rate at least 10 movies. The app
-presents twenty randomly selected well-rated titles (a refresh button lets you
-change the selection while keeping the ratings already given). Once ten movies
-are rated, you can submit the profile and a quick user-based algorithm suggests
-ten movies you might enjoy.
+When creating a profile you are asked to rate at least 10 movies. A dedicated
+"Créer un profil" tab presents ten randomly selected well-rated titles (a refresh
+button lets you change the selection while keeping the ratings already given).
+Once ten movies are rated, you can submit the profile and a quick user-based
+algorithm suggests ten movies you might enjoy. A rating of ``0`` simply means
+that no rating was provided for that title.
 
 
 When a user logs in successfully, the sidebar user selector now includes a
