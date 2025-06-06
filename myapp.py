@@ -72,6 +72,23 @@ def fetch_movie_details(imdb_id: int | str | None) -> dict:
     return {}
 
 
+def fetch_trailer_url(tmdb_id: int | str | None) -> str:
+    """Return a YouTube trailer URL using the TMDb API if a key is provided."""
+    api_key = os.environ.get("TMDB_API_KEY")
+    if not (api_key and tmdb_id):
+        return ""
+    url = f"https://api.themoviedb.org/3/movie/{int(tmdb_id)}/videos?api_key={api_key}"
+    try:
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        for video in data.get("results", []):
+            if video.get("site", "").lower() == "youtube":
+                return f"https://www.youtube.com/watch?v={video['key']}"
+    except Exception:
+        pass
+    return ""
+
+
 @st.cache_data
 def load_recommendations(path: str) -> pd.DataFrame:
     """Load pre-computed top-n recommendations."""
@@ -164,6 +181,27 @@ def show_movie_details(movie_id: int, user_id: int | None, state_key: str) -> No
             if details.get("imdbRating"):
                 st.write(f"Note IMDb : {details['imdbRating']}")
 
+            tmdb_id = id_to_tmdb.get(movie_id)
+            imdb_id_val = id_to_imdb.get(movie_id)
+            trailer_url = fetch_trailer_url(tmdb_id)
+            links = []
+            if imdb_id_val:
+                links.append(
+                    f"[IMDb](https://www.imdb.com/title/tt{int(imdb_id_val):07d}/)"
+                )
+            if tmdb_id:
+                links.append(
+                    f"[TMDB](https://www.themoviedb.org/movie/{int(tmdb_id)})"
+                )
+            if links:
+                st.markdown(" • ".join(links))
+            if trailer_url:
+                if st.button(
+                    "Bande-annonce",
+                    key=f"trailer_{state_key}_{movie_id}",
+                ):
+                    st.video(trailer_url)
+
         with col_side:
             if details.get("poster"):
                 st.image(details["poster"], use_container_width=True)
@@ -225,6 +263,16 @@ try:
     )
     year_series = movies[title_col].str.extract(r"\((\d{4})\)", expand=False)
     movies["year"] = pd.to_numeric(year_series, errors="coerce")
+    years = movies["year"].dropna()
+    YEAR_MIN = int(years.min()) if not years.empty else 1900
+    YEAR_MAX = int(years.max()) if not years.empty else 2020
+    if not movies.empty and "genres" in movies.columns:
+        genre_set = set()
+        for g in movies["genres"].dropna():
+            genre_set.update(g.split("|"))
+        AVAILABLE_GENRES = sorted(genre_set)
+    else:
+        AVAILABLE_GENRES = []
     pool_df = movies.dropna(subset=["year"])  # keep only movies with a year
     pool_df = pool_df[pool_df["year"] >= 2005]
     rated_pool = pool_df.merge(
@@ -250,6 +298,9 @@ except FileNotFoundError:
     id_col = title_col = None
     global_ratings = pd.Series(dtype=float)
     FEATURED_POOL_IDS = []
+    YEAR_MIN = 1900
+    YEAR_MAX = 2020
+    AVAILABLE_GENRES = []
 
 # Interface principale en onglets
 tab_featured, tab_rec, tab_users, tab_rated = st.tabs(
@@ -347,7 +398,48 @@ with tab_rec:
     with trending_container:
         if not movies.empty and user_id is not None:
             st.subheader(f"\u00c0 la une pour l'utilisateur {user_id}")
-            trending = recs[recs["user"] == user_id].nlargest(12, "estimated_rating")
+
+            genre_filter = st.multiselect(
+                "Filtrer par genre",
+                AVAILABLE_GENRES,
+                key="trend_genres",
+            )
+            year_range = st.slider(
+                "Ann\u00e9e de sortie",
+                YEAR_MIN,
+                YEAR_MAX,
+                (YEAR_MIN, YEAR_MAX),
+                key="trend_years",
+            )
+            min_rating = st.slider(
+                "Note minimale",
+                0.0,
+                5.0,
+                0.0,
+                0.5,
+                key="trend_rating",
+            )
+
+            trending = recs[recs["user"] == user_id]
+            trending = trending.merge(
+                movies[[id_col, "genres", "year"]],
+                left_on="item",
+                right_on=id_col,
+                how="left",
+            )
+            trending = trending[trending["estimated_rating"] >= min_rating]
+            trending = trending[trending["year"].between(*year_range)]
+            if genre_filter:
+                trending = trending[
+                    trending["genres"].apply(
+                        lambda g: any(gen in g.split("|") for gen in genre_filter)
+                        if isinstance(g, str)
+                        else False
+                    )
+                ]
+
+            trending = trending.nlargest(12, "estimated_rating")
+
             for start in range(0, len(trending), 4):
                 subset = trending.iloc[start : start + 4]
                 cols = st.columns(len(subset))
