@@ -420,6 +420,7 @@ with tab_users:
                 hashed = hashlib.sha256(login_password.encode()).hexdigest()
                 if hashed == row.iloc[0]["password"]:
                     st.success(f"Connecté en tant que {login_pseudo}")
+
                     st.session_state["active_user_id"] = int(row.iloc[0]["userId"])
                     st.session_state["active_pseudo"] = login_pseudo
                 else:
