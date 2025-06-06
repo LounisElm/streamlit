@@ -102,6 +102,12 @@ def append_rating(user: int, movie: int, rating: float) -> None:
     for path in [RATINGS_COPY_PATH, RATINGS_ALL_PATH]:
         header = not os.path.exists(path)
         row.to_csv(path, mode="a", header=header, index=False)
+        df = pd.read_csv(path)
+        if "timestamp" in df.columns:
+            df = df.sort_values(["userId", "timestamp"])  # keep users grouped
+        else:
+            df = df.sort_values(["userId"])
+        df.to_csv(path, index=False)
 
 REC_PATHS = {
     "Full dataset": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_full.csv",
@@ -350,11 +356,17 @@ with tab_users:
                 ratings_ext = ratings_ext._append(row, ignore_index=True)
                 new_rows.append(row)
 
+            ratings_ext = ratings_ext.sort_values(["userId", "timestamp"])
             ratings_ext.to_csv(RATINGS_COPY_PATH, index=False)
+
             if new_rows:
-                pd.DataFrame(new_rows).to_csv(
-                    RATINGS_ALL_PATH, mode="a", header=not os.path.exists(RATINGS_ALL_PATH), index=False
-                )
+                if os.path.exists(RATINGS_ALL_PATH):
+                    ratings_all = pd.read_csv(RATINGS_ALL_PATH)
+                else:
+                    ratings_all = pd.DataFrame(columns=["userId", "movieId", "rating", "timestamp"])
+                ratings_all = pd.concat([ratings_all, pd.DataFrame(new_rows)], ignore_index=True)
+                ratings_all = ratings_all.sort_values(["userId", "timestamp"])
+                ratings_all.to_csv(RATINGS_ALL_PATH, index=False)
             st.success(f"Profil enregistré avec l'identifiant {next_id}.")
 
 with tab_rated:
