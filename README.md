@@ -42,4 +42,5 @@ pip install -r requirements.txt
 ```
 
 The `requirements.txt` file lists `streamlit`, `pandas`, `scikit-learn` and the
-other dependencies needed to run the application.
+other dependencies needed to run the application. Numpy is pinned to a
+pre-2.0 release to ensure compatibility with `scikit-surprise`.
