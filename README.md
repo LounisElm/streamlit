@@ -42,12 +42,4 @@ pip install -r requirements.txt
 ```
 
 The `requirements.txt` file lists `streamlit`, `pandas`, `scikit-learn` and the
-other dependencies needed to run the application. Some recommendation algorithms
-rely on the optional `scikit-surprise` package. Install it with:
-
-```bash
-pip install scikit-surprise
-```
-
-If the package is missing, only the basic cosine similarity model will be
-available.
+other dependencies needed to run the application.
