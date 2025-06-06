@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import os
 import hashlib
+import random
 
 st.set_page_config(page_title="Cinéma", layout="wide")
 
@@ -46,6 +47,7 @@ def fetch_poster(imdb_id: int | str | None) -> str:
     return ""
 
 
+@st.cache_data
 def fetch_movie_details(imdb_id: int | str | None) -> dict:
     """Return additional movie details from the OMDb API."""
     if not imdb_id:
@@ -118,6 +120,76 @@ def append_rating(user: int, movie: int, rating: float) -> None:
         df.to_csv(path, index=False)
 
 
+def get_random_top_movies(n: int = 10) -> list[dict]:
+    """Return ``n`` movies chosen randomly from a curated pool."""
+    if not FEATURED_POOL_IDS:
+        return []
+    chosen = random.sample(FEATURED_POOL_IDS, k=min(n, len(FEATURED_POOL_IDS)))
+    results = []
+    for movie_id in chosen:
+        details = fetch_movie_details(id_to_imdb.get(movie_id))
+        details["movieId"] = movie_id
+        details["title"] = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
+        results.append(details)
+    return results
+
+
+def show_movie_details(movie_id: int, user_id: int | None, state_key: str) -> None:
+    """Display movie details with rating option."""
+    details = fetch_movie_details(id_to_imdb.get(movie_id))
+    title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
+
+    with st.expander(title, expanded=True):
+        col_main, col_side = st.columns([3, 1])
+
+        with col_main:
+            if details.get("plot"):
+                st.markdown(
+                    f"<div class='description'>{details['plot']}</div>",
+                    unsafe_allow_html=True,
+                )
+            genres = ""
+            if not movies.empty and "genres" in movies.columns:
+                match = movies[movies[id_col] == movie_id]
+                if not match.empty:
+                    genres = match.iloc[0]["genres"].replace("|", ", ")
+            if genres:
+                st.write(f"Genres : {genres}")
+            if details.get("runtime"):
+                st.write(f"Durée : {details['runtime']}")
+            if details.get("actors"):
+                st.write(f"Acteurs : {details['actors']}")
+            if movie_id in global_ratings.index:
+                st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
+            if details.get("imdbRating"):
+                st.write(f"Note IMDb : {details['imdbRating']}")
+
+        with col_side:
+            if details.get("poster"):
+                st.image(details["poster"], use_container_width=True)
+            if user_id is not None:
+                slider_col, button_col = st.columns([2, 1])
+                user_rating = slider_col.slider(
+                    "Votre note",
+                    0.0,
+                    5.0,
+                    2.5,
+                    0.5,
+                    key=f"user_rating_{state_key}_{movie_id}",
+                )
+                if button_col.button(
+                    "Enregistrer",
+                    key=f"save_rating_{state_key}_{movie_id}",
+                ):
+                    append_rating(user_id, movie_id, user_rating)
+                    st.success("Note enregistrée")
+            else:
+                st.info("Sélectionnez un utilisateur pour noter ce film.")
+
+        if st.button("Fermer", key=f"close_details_{state_key}"):
+            st.session_state.pop(state_key, None)
+
+
 REC_PATHS = {
     "Full dataset": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_full.csv",
     "Leave-one-out": "RECOMMENDER-SYSTEM/mlsmm2156/top_n_loo.csv",
@@ -151,6 +223,22 @@ try:
     id_to_tmdb = (
         dict(zip(links[link_id_col], links[tmdb_col])) if not links.empty else {}
     )
+    year_series = movies[title_col].str.extract(r"\((\d{4})\)", expand=False)
+    movies["year"] = pd.to_numeric(year_series, errors="coerce")
+    pool_df = movies.dropna(subset=["year"])  # keep only movies with a year
+    pool_df = pool_df[pool_df["year"] >= 2005]
+    rated_pool = pool_df.merge(
+        global_ratings.rename("mean_rating"),
+        left_on=id_col,
+        right_index=True,
+        how="left",
+    )
+    rated_pool = rated_pool.dropna(subset=["mean_rating"])
+    FEATURED_POOL_IDS = (
+        rated_pool.sort_values("mean_rating", ascending=False)
+        .head(100)[id_col]
+        .tolist()
+    )
 except FileNotFoundError:
     st.warning(
         f"Fichier {MOVIES_PATH} introuvable : les titres ne seront pas affichés."
@@ -161,10 +249,12 @@ except FileNotFoundError:
     id_to_tmdb = {}
     id_col = title_col = None
     global_ratings = pd.Series(dtype=float)
+    FEATURED_POOL_IDS = []
 
 # Interface principale en onglets
-tab_rec, tab_users, tab_rated = st.tabs(
+tab_featured, tab_rec, tab_users, tab_rated = st.tabs(
     [
+        "À la une",
         "Recommandations",
         "Utilisateurs",
         "Films notés",
@@ -192,6 +282,34 @@ with st.sidebar:
         user_id = None if selected_user == "All users" else int(selected_user)
 
     movie_query = st.text_input("Rechercher un film")
+
+with tab_featured:
+    st.subheader("Films bien notés")
+    featured_movies = get_random_top_movies()
+    if not featured_movies:
+        st.write("Aucun film à afficher.")
+    else:
+        for start in range(0, len(featured_movies), 5):
+            subset = featured_movies[start : start + 5]
+            cols = st.columns(len(subset))
+            for col, details in zip(cols, subset):
+                with col:
+                    st.text(details["title"])
+                    if details.get("poster"):
+                        st.image(details["poster"], use_container_width=True)
+                    if st.button(
+                        "Description",
+                        key=f"feat_{details['movieId']}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["selected_featured"] = details["movieId"]
+    if "selected_featured" in st.session_state:
+        show_movie_details(
+            st.session_state["selected_featured"],
+            user_id,
+            "selected_featured",
+        )
+        st.markdown("---")
 
 with tab_rec:
     if movie_query:
@@ -251,59 +369,11 @@ with tab_rec:
 
 
     if "selected_movie" in st.session_state:
-        movie_id = st.session_state["selected_movie"]
-        details = fetch_movie_details(id_to_imdb.get(movie_id))
-        title = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
-
-        with st.expander(title, expanded=True):
-            col_main, col_side = st.columns([3, 1])
-
-            with col_main:
-                if details.get("plot"):
-                    st.markdown(
-                        f"<div class='description'>{details['plot']}</div>",
-                        unsafe_allow_html=True,
-                    )
-                genres = ""
-                if not movies.empty and "genres" in movies.columns:
-                    match = movies[movies[id_col] == movie_id]
-                    if not match.empty:
-                        genres = match.iloc[0]["genres"].replace("|", ", ")
-                if genres:
-                    st.write(f"Genres : {genres}")
-                if details.get("runtime"):
-                    st.write(f"Durée : {details['runtime']}")
-                if details.get("actors"):
-                    st.write(f"Acteurs : {details['actors']}")
-                if movie_id in global_ratings.index:
-                    st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
-                if details.get("imdbRating"):
-                    st.write(f"Note IMDb : {details['imdbRating']}")
-
-            with col_side:
-                if details.get("poster"):
-                    st.image(details["poster"], use_container_width=True)
-                if user_id is not None:
-                    slider_col, button_col = st.columns([2, 1])
-                    user_rating = slider_col.slider(
-                        "Votre note",
-                        0.0,
-                        5.0,
-                        2.5,
-                        0.5,
-                        key=f"user_rating_{movie_id}",
-                    )
-                    if button_col.button(
-                        "Enregistrer",
-                        key=f"save_rating_{movie_id}",
-                    ):
-                        append_rating(user_id, movie_id, user_rating)
-                        st.success("Note enregistrée")
-                else:
-                    st.info("Sélectionnez un utilisateur pour noter ce film.")
-
-            if st.button("Fermer", key="close_details"):
-                st.session_state.pop("selected_movie", None)
+        show_movie_details(
+            st.session_state["selected_movie"],
+            user_id,
+            "selected_movie",
+        )
         st.markdown("---")
 
         st.subheader("Performances des modèles (hors ligne)")
