@@ -25,3 +25,14 @@ authentication within the app.
 When a user logs in successfully, the sidebar user selector now includes a
 **Profil actif** option synced with the connected user. Selecting this option
 lets you rate movies and export those ratings together with the other users.
+
+## Installation
+
+Install the required Python packages using `pip`:
+
+```bash
+pip install -r requirements.txt
+```
+
+The `requirements.txt` file lists `streamlit`, `pandas`, `scikit-learn` and the
+other dependencies needed to run the application.
