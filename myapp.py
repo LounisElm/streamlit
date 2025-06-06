@@ -7,12 +7,6 @@ import random
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-try:
-    from surprise import Dataset, Reader, SVD, KNNWithMeans
-    SURPRISE_AVAILABLE = True
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    SURPRISE_AVAILABLE = False
-
 st.set_page_config(page_title="Cinéma", layout="wide")
 
 # Style inspiré de Netflix
@@ -217,48 +211,6 @@ def recommend_user_based(
     return pd.DataFrame(top, columns=["movieId", "score"])
 
 
-def recommend_svd(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.DataFrame:
-    """Return ``top_n`` SVD recommendations for ``user_id``."""
-
-    if not SURPRISE_AVAILABLE:
-        raise ImportError("scikit-surprise is required for SVD")
-
-    reader = Reader(rating_scale=(ratings["rating"].min(), ratings["rating"].max()))
-    data = Dataset.load_from_df(ratings[["userId", "movieId", "rating"]], reader)
-    trainset = data.build_full_trainset()
-    algo = SVD(random_state=0, n_factors=50)
-    algo.fit(trainset)
-
-    rated = set(ratings[ratings["userId"] == user_id]["movieId"])
-    all_items = set(ratings["movieId"].unique())
-    unrated = all_items - rated
-    testset = [(user_id, iid, 0) for iid in unrated]
-    preds = algo.test(testset)
-    top = sorted(preds, key=lambda x: x.est, reverse=True)[:top_n]
-    return pd.DataFrame([(int(p.iid), p.est) for p in top], columns=["movieId", "score"])
-
-
-def recommend_knn(ratings: pd.DataFrame, user_id: int, top_n: int = 10) -> pd.DataFrame:
-    """Return ``top_n`` KNN-based recommendations for ``user_id``."""
-    if not SURPRISE_AVAILABLE:
-        raise ImportError("scikit-surprise is required for KNN")
-
-
-    reader = Reader(rating_scale=(ratings["rating"].min(), ratings["rating"].max()))
-    data = Dataset.load_from_df(ratings[["userId", "movieId", "rating"]], reader)
-    trainset = data.build_full_trainset()
-    algo = KNNWithMeans(sim_options={"name": "cosine", "user_based": True})
-    algo.fit(trainset)
-
-    rated = set(ratings[ratings["userId"] == user_id]["movieId"])
-    all_items = set(ratings["movieId"].unique())
-    unrated = all_items - rated
-    testset = [(user_id, iid, 0) for iid in unrated]
-    preds = algo.test(testset)
-    top = sorted(preds, key=lambda x: x.est, reverse=True)[:top_n]
-    return pd.DataFrame([(int(p.iid), p.est) for p in top], columns=["movieId", "score"])
-
-
 def show_movie_details(movie_id: int, user_id: int | None, state_key: str) -> None:
     """Display movie details with rating option."""
     details = fetch_movie_details(id_to_imdb.get(movie_id))
@@ -446,12 +398,6 @@ with st.sidebar:
     else:
         user_id = None if selected_user == "All users" else int(selected_user)
 
-    algo_choices = ["Cosinus"]
-    if SURPRISE_AVAILABLE:
-        algo_choices.extend(["Funk SVD", "KNN"])
-    model_option = st.selectbox("Algorithme de recommandation", algo_choices
-
-
     movie_query = st.text_input("Rechercher un film")
 
 with tab_featured:
@@ -548,12 +494,7 @@ with tab_rec:
             if trending.empty:
                 if os.path.exists(RATINGS_ALL_PATH):
                     ratings_all = load_all_ratings(RATINGS_ALL_PATH)
-                    if model_option == "Cosinus":
-                        trending = recommend_user_based(ratings_all, user_id, top_n=30)
-                    elif model_option == "Funk SVD":
-                        trending = recommend_svd(ratings_all, user_id, top_n=30)
-                    else:
-                        trending = recommend_knn(ratings_all, user_id, top_n=30)
+                    trending = recommend_user_based(ratings_all, user_id, top_n=30)
                     trending = trending.rename(
                         columns={"movieId": "item", "score": "estimated_rating"}
                     )
@@ -670,13 +611,6 @@ with tab_profile:
     pseudo = st.text_input("Pseudonyme")
     password = st.text_input("Mot de passe", type="password")
 
-    profile_choices = ["Cosinus"]
-    if SURPRISE_AVAILABLE:
-        profile_choices.extend(["Funk SVD", "KNN"])
-    model_option_profile = st.selectbox(
-        "Algorithme de recommandation",
-        profile_choices,
-
     if "profile_ratings" not in st.session_state:
         st.session_state["profile_ratings"] = {}
     if "profile_pool" not in st.session_state:
@@ -744,12 +678,7 @@ with tab_profile:
                 st.success(f"Profil enregistré avec l'identifiant {next_id}.")
 
                 ratings_all = pd.read_csv(RATINGS_ALL_PATH)
-                if model_option_profile == "Cosinus":
-                    rec_df = recommend_user_based(ratings_all, next_id)
-                elif model_option_profile == "Funk SVD":
-                    rec_df = recommend_svd(ratings_all, next_id)
-                else:
-                    rec_df = recommend_knn(ratings_all, next_id)
+                rec_df = recommend_user_based(ratings_all, next_id)
                 if not rec_df.empty:
                     rec_df["title"] = rec_df["movieId"].map(id_to_title)
                     st.subheader("Films recommandés :")
