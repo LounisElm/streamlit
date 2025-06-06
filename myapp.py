@@ -170,8 +170,17 @@ with st.sidebar:
 
     user_ids = sorted(recs["user"].unique())
     user_options = ["All users"] + [str(uid) for uid in user_ids]
+
+    if "active_user_id" in st.session_state:
+        active_label = f"Profil actif ({st.session_state['active_pseudo']})"
+        user_options.insert(0, active_label)
+
     selected_user = st.selectbox("Utilisateur", user_options)
-    user_id = None if selected_user == "All users" else int(selected_user)
+
+    if selected_user.startswith("Profil actif"):
+        user_id = st.session_state["active_user_id"]
+    else:
+        user_id = None if selected_user == "All users" else int(selected_user)
 
     movie_query = st.text_input("Rechercher un film")
 
@@ -411,6 +420,9 @@ with tab_users:
                 hashed = hashlib.sha256(login_password.encode()).hexdigest()
                 if hashed == row.iloc[0]["password"]:
                     st.success(f"Connecté en tant que {login_pseudo}")
+
+                    st.session_state["active_user_id"] = int(row.iloc[0]["userId"])
+                    st.session_state["active_pseudo"] = login_pseudo
                 else:
                     st.error("Mot de passe incorrect.")
             else:

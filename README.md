@@ -13,3 +13,8 @@ an incremental identifier following the last existing user ID in the ratings
 dataset. Passwords are stored using a SHA-256 hash and displayed hashed in the
 "Liste des utilisateurs" table. A basic login form allows you to test profile
 authentication within the app.
+
+
+When a user logs in successfully, the sidebar user selector now includes a
+**Profil actif** option synced with the connected user. Selecting this option
+lets you rate movies and export those ratings together with the other users.
