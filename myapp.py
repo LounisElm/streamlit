@@ -166,8 +166,10 @@ with st.sidebar:
     selected_rec = st.selectbox("Source des recommandations", list(REC_PATHS.keys()))
     recs = load_recommendations(REC_PATHS[selected_rec])
 
-    user_ids = recs["user"].unique()
-    user_id = st.selectbox("Utilisateur", sorted(user_ids))
+    user_ids = sorted(recs["user"].unique())
+    user_options = ["All users"] + [str(uid) for uid in user_ids]
+    selected_user = st.selectbox("Utilisateur", user_options)
+    user_id = None if selected_user == "All users" else int(selected_user)
 
     movie_query = st.text_input("Rechercher un film")
 
@@ -203,7 +205,7 @@ with tab_rec:
 
     trending_container = st.container()
     with trending_container:
-        if not movies.empty:
+        if not movies.empty and user_id is not None:
             st.subheader(f"\u00c0 la une pour l'utilisateur {user_id}")
             trending = recs[recs["user"] == user_id].nlargest(12, "estimated_rating")
             for start in range(0, len(trending), 4):
@@ -222,6 +224,8 @@ with tab_rec:
                             use_container_width=True,
                         ):
                             st.session_state["selected_movie"] = row["item"]
+        elif user_id is None:
+            st.info("Sélectionnez un utilisateur pour voir les recommandations.")
 
     if "selected_movie" in st.session_state:
         movie_id = st.session_state["selected_movie"]
@@ -254,17 +258,20 @@ with tab_rec:
                     st.write(f"Note moyenne : {global_ratings[movie_id]:.2f}/5")
                 if details.get("imdbRating"):
                     st.write(f"Note IMDb : {details['imdbRating']}")
-                user_rating = st.slider(
-                    "Votre note",
-                    0.0,
-                    5.0,
-                    2.5,
-                    0.5,
-                    key=f"user_rating_{movie_id}",
-                )
-                if st.button("Enregistrer la note", key=f"save_rating_{movie_id}"):
-                    append_rating(user_id, movie_id, user_rating)
-                    st.success("Note enregistree")
+                if user_id is not None:
+                    user_rating = st.slider(
+                        "Votre note",
+                        0.0,
+                        5.0,
+                        2.5,
+                        0.5,
+                        key=f"user_rating_{movie_id}",
+                    )
+                    if st.button("Enregistrer la note", key=f"save_rating_{movie_id}"):
+                        append_rating(user_id, movie_id, user_rating)
+                        st.success("Note enregistree")
+                else:
+                    st.info("Sélectionnez un utilisateur pour noter ce film.")
                 if st.button("Fermer", key="close_details"):
                     st.session_state.pop("selected_movie", None)
 
@@ -381,8 +388,11 @@ with tab_rated:
     )
     merged = merged[["userId", "movieId", title_col, "rating"]]
 
-    # Show only the ratings for the currently selected user
-    user_ratings = merged[merged["userId"] == user_id]
+    # Show only the ratings for the selected user (or all users)
+    if user_id is None:
+        user_ratings = merged
+    else:
+        user_ratings = merged[merged["userId"] == user_id]
     st.dataframe(user_ratings.head(100))
     if not user_ratings.empty:
         csv = user_ratings.to_csv(index=False).encode("utf-8")
