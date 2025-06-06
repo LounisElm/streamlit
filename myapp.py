@@ -119,7 +119,6 @@ def append_rating(user: int, movie: int, rating: float) -> None:
             df = df.sort_values(["userId"])
         df.to_csv(path, index=False)
 
-
 def get_random_top_movies(n: int = 10) -> list[dict]:
     """Return ``n`` movies chosen randomly from a curated pool."""
     if not FEATURED_POOL_IDS:
@@ -131,6 +130,7 @@ def get_random_top_movies(n: int = 10) -> list[dict]:
         details["movieId"] = movie_id
         details["title"] = details.get("title") or id_to_title.get(movie_id, f"Film {movie_id}")
         results.append(details)
+
     return results
 
 
