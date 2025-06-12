@@ -399,7 +399,7 @@ with st.sidebar:
         user_id = None if selected_user == "All users" else int(selected_user)
 
     algo_choices = ["Cosinus"]
-    model_option = st.selectbox("Algorithme de recommandation", algo_choices)
+    model_option = st.selectbox("Modèle", algo_choices)
 
     movie_query = st.text_input("Rechercher un film")
 
@@ -616,7 +616,7 @@ with tab_profile:
 
     profile_choices = ["Cosinus"]
     model_option_profile = st.selectbox(
-        "Algorithme de recommandation",
+        "Modèle",
         profile_choices,
         key="profile_model",
     )
