@@ -398,7 +398,7 @@ with st.sidebar:
     else:
         user_id = None if selected_user == "All users" else int(selected_user)
 
-    algo_choices = ["Cosinus"]
+    algo_choices = ["KNN"]
     model_option = st.selectbox("Modèle", algo_choices)
 
     movie_query = st.text_input("Rechercher un film")
